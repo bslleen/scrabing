@@ -9,7 +9,10 @@ fi
 source venv/bin/activate
 
 echo "Job Discovery"
-echo "1) Discover job URLs from a site"
+echo "1) Discover job URLs from a site (no saving)"
+echo "2) Add a source"
+echo "3) List sources"
+echo "4) Scrape a source"
 echo "q) Quit"
 read -rp "> " choice
 
@@ -17,6 +20,22 @@ case "$choice" in
     1)
         read -rp "Careers page URL: " url
         python3 cli.py discover "$url"
+        ;;
+    2)
+        read -rp "Careers page URL: " url
+        read -rp "Name (optional): " name
+        if [ -z "$name" ]; then
+            python3 cli.py add-source "$url"
+        else
+            python3 cli.py add-source "$url" --name "$name"
+        fi
+        ;;
+    3)
+        python3 cli.py sources
+        ;;
+    4)
+        read -rp "Source id: " source_id
+        python3 cli.py scrape "$source_id"
         ;;
     q)
         exit 0

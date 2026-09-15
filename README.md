@@ -1,11 +1,12 @@
 # Job Discovery
 
 Given a careers page or job board URL, discovers individual job-posting URLs
-on that site, handling pagination. Rule-based only: no AI, no API keys, no
-external services. Everything runs locally against a single SQLite file.
+on that site, scrapes each one, and stores the results. Rule-based only: no
+AI, no API keys, no external services. Everything runs locally against a
+single SQLite file.
 
-This is Phase 1 of a larger pipeline (discover -> scrape -> normalize ->
-filter -> browse in a local UI). Only discovery is built so far.
+Pipeline: discover -> scrape -> normalize -> filter -> browse in a local UI.
+Discovery, source registration, and per-job scraping are built so far.
 
 ## Setup
 
@@ -18,36 +19,58 @@ Creates a virtualenv, installs dependencies, and copies `.env.example` to
 
 ## Usage
 
-```
-./start.sh
-```
+Interactively: `./start.sh` (a simple menu covering the commands below).
 
-or directly:
+Or directly:
 
 ```
 source venv/bin/activate
+
+# Try discovery without saving anything:
 python3 cli.py discover https://example-company.com/careers
+
+# Register a site, then scrape it into the database:
+python3 cli.py add-source https://example-company.com/careers --name "Example Company"
+python3 cli.py sources
+python3 cli.py scrape 1
 ```
 
-Add `--max-pages N` to cap how many paginated pages are followed. The delay
-between page fetches is set by `CRAWL_DELAY_SECONDS` in `.env`. If a site
-blocks the crawler (HTTP 403) or rate-limits it (HTTP 429), that's reported
-clearly and the crawl stops for that site rather than crashing.
+`discover` accepts `--max-pages N` to cap how many paginated listing pages
+are followed. The delay between page fetches is `CRAWL_DELAY_SECONDS` in
+`.env`. If a site blocks the crawler (HTTP 403) or rate-limits it (HTTP
+429), that's reported clearly and the crawl stops for that site rather than
+crashing.
 
-`discovery.crawler.discover_job_urls(source)` takes any mapping with a
-"url" key (a `sources` row, or a plain `{"url": ...}` dict) and returns a
-deduplicated `list[str]` of candidate job-posting URLs. Crawling only
-prints results for now - it doesn't persist them yet. The full pipeline's
-schema lives in `discovery/db.py` / `discovery/schema.sql` (`sources`,
-`raw_jobs`, `jobs`, `criteria`, `job_matches` in `data/jobs.db`).
+### Data model (`discovery/db.py`, `discovery/schema.sql`)
 
-`discovery/sources.py` registers sites to scrape (`add_source`,
-`list_sources`, `remove_source`). Only `type='custom_html'` is supported so
-far: a site scraped via CSS selectors in `scrape_config`. If you don't
-supply one, a crude default heuristic is stored instead (any `<a>` tag
-whose href/text contains "job" or "career") - meant to be overridden once
-a site has been inspected by hand. Wiring the crawler and a source's
-`scrape_config` together lands in the scraping phase.
+`sources` (sites to scrape) -> `raw_jobs` (one row per scraped posting) ->
+`jobs` (normalized, not built yet) -> `job_matches` (filtered against saved
+`criteria`, not built yet). All in `data/jobs.db`.
+
+### Sources (`discovery/sources.py`)
+
+`add_source`, `list_sources`, `remove_source`. Only `type='custom_html'` is
+supported so far. If you don't supply a `scrape_config`, a crude default
+heuristic is stored instead (any `<a>` tag whose href/text contains "job"
+or "career") - meant to be overridden once a site has been inspected by
+hand. It isn't consumed by the crawler yet.
+
+### Crawling (`discovery/crawler.py`)
+
+`discover_job_urls(source)` takes any mapping with a "url" key (a `sources`
+row, or a plain `{"url": ...}` dict) and returns a deduplicated `list[str]`
+of candidate job-posting URLs, following "next page" links.
+
+### Scraping (`discovery/scraper.py`)
+
+`scrape_source(source_id)` discovers a source's job URLs, fetches each one
+not already in `raw_jobs` (deduped on `raw_jobs.url`), and stores both the
+raw HTML and an extracted `raw_text`. Extraction is JSON-LD-first: if the
+page embeds a schema.org `JobPosting` (common on many job boards), its
+`description` is used directly; otherwise a handful of common
+description-container class names are tried, falling back to the page's
+whole visible text as a last resort. Updates `sources.last_scraped_at`
+when done.
 
 ## Tests
 

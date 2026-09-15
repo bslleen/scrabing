@@ -104,6 +104,20 @@ def delete_source(source_id, db_path=None):
         conn.close()
 
 
+def update_source_last_scraped(source_id, last_scraped_at, db_path=None):
+    """Returns True if a source with this id existed and was updated."""
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            cursor = conn.execute(
+                "UPDATE sources SET last_scraped_at = ? WHERE id = ?",
+                (last_scraped_at, source_id),
+            )
+            return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 # --- raw_jobs ------------------------------------------------------------
 
 def insert_raw_job(url, source_id=None, external_id=None, raw_html=None, raw_text=None,
