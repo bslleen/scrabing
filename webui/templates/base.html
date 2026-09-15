@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Job Discovery{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sidebar__app-name">Job Discovery</div>
+      <nav class="sidebar__nav">
+        <a class="sidebar__link{% if request.path == '/' %} is-active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a class="sidebar__link{% if request.path.startswith('/sources') %} is-active{% endif %}" href="{{ url_for('sources_list') }}">Sources</a>
+        <a class="sidebar__link{% if request.path.startswith('/jobs') %} is-active{% endif %}" href="{{ url_for('jobs_list') }}">Jobs</a>
+        <a class="sidebar__link{% if request.path.startswith('/matches') %} is-active{% endif %}" href="{{ url_for('matches_list') }}">Matches</a>
+        <a class="sidebar__link{% if request.path.startswith('/criteria') %} is-active{% endif %}" href="{{ url_for('criteria_list') }}">Criteria</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="main__content">
+        {% from "_macros.html" import flash_messages %}
+        {{ flash_messages() }}
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

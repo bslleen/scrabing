@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Add job - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Add job manually</h1>
+</div>
+
+<div class="card" style="max-width:640px">
+  <form method="post" action="{{ url_for('jobs_create') }}">
+    <div class="field{% if errors.get('title') %} field--error{% endif %}">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="{{ form.get('title', '') }}">
+      {% if errors.get('title') %}<div class="field__error">{{ errors['title'] }}</div>{% endif %}
+    </div>
+
+    <div class="field{% if errors.get('company') %} field--error{% endif %}">
+      <label for="company">Company</label>
+      <input type="text" id="company" name="company" value="{{ form.get('company', '') }}">
+      {% if errors.get('company') %}<div class="field__error">{{ errors['company'] }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="location">Location</label>
+      <input type="text" id="location" name="location" value="{{ form.get('location', '') }}">
+    </div>
+
+    <div class="field">
+      <label for="description">Description</label>
+      <textarea id="description" name="description">{{ form.get('description', '') }}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="requirements">Requirements</label>
+      <textarea id="requirements" name="requirements">{{ form.get('requirements', '') }}</textarea>
+    </div>
+
+    <div class="field{% if errors.get('salary_min') %} field--error{% endif %}">
+      <label for="salary_min">Salary min</label>
+      <input type="number" id="salary_min" name="salary_min" value="{{ form.get('salary_min', '') }}">
+      {% if errors.get('salary_min') %}<div class="field__error">{{ errors['salary_min'] }}</div>{% endif %}
+    </div>
+
+    <div class="field{% if errors.get('salary_max') %} field--error{% endif %}">
+      <label for="salary_max">Salary max</label>
+      <input type="number" id="salary_max" name="salary_max" value="{{ form.get('salary_max', '') }}">
+      {% if errors.get('salary_max') %}<div class="field__error">{{ errors['salary_max'] }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="employment_type">Employment type</label>
+      <input type="text" id="employment_type" name="employment_type" value="{{ form.get('employment_type', '') }}" placeholder="full-time">
+    </div>
+
+    <div class="field">
+      <label for="posted_at">Posted date</label>
+      <input type="date" id="posted_at" name="posted_at" value="{{ form.get('posted_at', '') }}">
+    </div>
+
+    <div class="field">
+      <label for="source_url">Source URL</label>
+      <input type="url" id="source_url" name="source_url" value="{{ form.get('source_url', '') }}">
+      <div class="field__helper">Optional - lets "Open original posting" work on the job's detail page.</div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Add job</button>
+      <a href="{{ url_for('jobs_list') }}" class="btn btn--secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

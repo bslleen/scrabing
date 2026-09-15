@@ -18,6 +18,7 @@ echo "6) Add a criteria profile"
 echo "7) List criteria profiles"
 echo "8) Match jobs against a criteria profile (static rules)"
 echo "9) Re-score with AI (skipped if no AI_API_KEY is set)"
+echo "10) Launch web UI"
 echo "q) Quit"
 read -rp "> " choice
 
@@ -70,6 +71,10 @@ case "$choice" in
     9)
         read -rp "Criteria id: " criteria_id
         python3 cli.py ai-match "$criteria_id"
+        ;;
+    10)
+        echo "Starting web UI - open http://127.0.0.1:5000 in your browser (Ctrl+C to stop)"
+        python3 -m webui.app
         ;;
     q)
         exit 0

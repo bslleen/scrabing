@@ -1,0 +1,64 @@
+{% macro link_button(label, href, variant="secondary", small=False) %}
+<a href="{{ href }}" class="btn btn--{{ variant }}{% if small %} btn--small{% endif %}">{{ label }}</a>
+{% endmacro %}
+
+{% macro action_button(label, action, variant="primary", small=False, loading_label=None) %}
+<form method="post" action="{{ action }}" class="inline-form"{% if loading_label %} data-loading-label="{{ loading_label }}"{% endif %}>
+  <button type="submit" class="btn btn--{{ variant }}{% if small %} btn--small{% endif %}">{{ label }}</button>
+</form>
+{% endmacro %}
+
+{% macro delete_trigger(label, dialog_id, small=False) %}
+<button type="button" class="btn btn--danger{% if small %} btn--small{% endif %}" data-confirm-dialog="{{ dialog_id }}">{{ label }}</button>
+{% endmacro %}
+
+{% macro confirm_dialog(dialog_id, title, body, action_url, confirm_label="Delete") %}
+<dialog id="{{ dialog_id }}" class="confirm-dialog">
+  <div class="confirm-dialog__title">{{ title }}</div>
+  <div class="confirm-dialog__body">{{ body }}</div>
+  <form method="post" action="{{ action_url }}" class="confirm-dialog__actions">
+    <button type="button" class="btn btn--secondary" data-dialog-cancel>Cancel</button>
+    <button type="submit" class="btn btn--danger">{{ confirm_label }}</button>
+  </form>
+</dialog>
+{% endmacro %}
+
+{% macro badge(text, variant) %}
+<span class="badge badge--{{ variant }}">{{ text }}</span>
+{% endmacro %}
+
+{% macro status_badge(status) %}
+  {% set variant = {
+    "relevant": "success", "rejected": "danger", "pending": "warning",
+    "new": "neutral", "normalized": "neutral", "error": "danger",
+    "unmatched": "neutral"
+  }.get(status, "neutral") %}
+  <span class="badge badge--{{ variant }}">{{ status or "unmatched" }}</span>
+{% endmacro %}
+
+{% macro ai_confirmed_badge() %}
+<span class="badge badge--accent">AI &#10003;</span>
+{% endmacro %}
+
+{% macro empty_state(title, line, button_label, button_href) %}
+<div class="empty-state">
+  <div class="empty-state__title">{{ title }}</div>
+  <div class="empty-state__line">{{ line }}</div>
+  <a href="{{ button_href }}" class="btn btn--primary">{{ button_label }}</a>
+</div>
+{% endmacro %}
+
+{% macro flash_messages() %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-list">
+    {% for category, message in messages %}
+    <div class="flash flash--{{ 'danger' if category == 'danger' else 'success' }}">
+      <span>{{ message }}</span>
+      <button type="button" class="flash__close" aria-label="Dismiss">&times;</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+{% endmacro %}

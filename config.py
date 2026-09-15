@@ -40,3 +40,7 @@ AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
 AI_RELEVANCE_THRESHOLD = float(os.getenv("AI_RELEVANCE_THRESHOLD", "50"))
 AI_MAX_CONCURRENT_REQUESTS = int(os.getenv("AI_MAX_CONCURRENT_REQUESTS", "5"))
 AI_REQUEST_TIMEOUT_SECONDS = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
+
+# Local web UI (webui/app.py) - binds to localhost only by default.
+WEBUI_HOST = os.getenv("WEBUI_HOST", "127.0.0.1")
+WEBUI_PORT = int(os.getenv("WEBUI_PORT", "5000"))

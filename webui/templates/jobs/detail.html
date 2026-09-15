@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, ai_confirmed_badge, delete_trigger, confirm_dialog %}
+{% block title %}{{ job['title'] or 'Job' }} - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="detail-header">
+  <h1 class="page-title">{{ job['title'] | dash }}</h1>
+  <p class="detail-header__meta">{{ job['company'] | dash }} &middot; {{ job['location'] | dash }} &middot; {{ job['employment_type'] | dash }}</p>
+  <div class="badge-row">
+    {{ status_badge(latest_match['status'] if latest_match else none) }}
+    {% if latest_match and latest_match['ai_score'] is not none and latest_match['status'] == 'relevant' %}{{ ai_confirmed_badge() }}{% endif %}
+  </div>
+  <div class="detail-header__actions">
+    {% if raw_job and raw_job['url'] %}
+    <a href="{{ raw_job['url'] }}" target="_blank" rel="noopener" class="btn btn--secondary">Open original posting</a>
+    {% endif %}
+    {{ delete_trigger("Delete", "delete-job-" ~ job['id']) }}
+  </div>
+</div>
+
+{{ confirm_dialog(
+  "delete-job-" ~ job['id'],
+  "Delete this job?",
+  "This also removes its match records. This can't be undone.",
+  url_for('jobs_delete', job_id=job['id'])
+) }}
+
+<div class="detail-columns">
+  <div>
+    <div class="card">
+      <div class="card__heading">Description</div>
+      <div class="detail-text">{{ job['description'] | dash }}</div>
+    </div>
+    <div class="card">
+      <div class="card__heading">Requirements</div>
+      <div class="detail-text">{{ job['requirements'] | dash }}</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card__heading">Match</div>
+      {% if latest_match %}
+        <p><span class="meta-label">Static score</span><br>{{ latest_match['static_score'] | dash }}</p>
+        <div class="criteria-card__row">
+          <span class="meta-label">Match reasons</span>
+          {% if match_reasons %}
+          <ul class="reasons-list">
+            {% for reason in match_reasons %}<li>{{ reason }}</li>{% endfor %}
+          </ul>
+          {% else %}
+          <p class="text-muted">No rules matched.</p>
+          {% endif %}
+        </div>
+        <p class="criteria-card__row"><span class="meta-label">AI score</span><br>{{ latest_match['ai_score'] if latest_match['ai_score'] is not none else "not run" }}</p>
+        {% if latest_match['ai_reasoning'] %}
+        <p class="ai-quote">&ldquo;{{ latest_match['ai_reasoning'] }}&rdquo;</p>
+        {% endif %}
+      {% else %}
+        <p class="text-muted">This job hasn't been matched against any criteria profile yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card__heading">Source</div>
+      {% if source or raw_job %}
+      <p><span class="meta-label">Name</span><br>{{ source['name'] | dash if source else "—" }}</p>
+      <p class="criteria-card__row"><span class="meta-label">URL</span><br><span class="mono">{{ raw_job['url'] | dash if raw_job else "—" }}</span></p>
+      <p class="criteria-card__row"><span class="meta-label">Scraped at</span><br><span title="{{ raw_job['scraped_at'] if raw_job else '' }}">{{ raw_job['scraped_at'] | dash if raw_job else "—" }}</span></p>
+      <p class="criteria-card__row"><span class="meta-label">External id</span><br>{{ raw_job['external_id'] | dash if raw_job else "—" }}</p>
+      {% else %}
+      <p class="text-muted">Added manually - no source recorded.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

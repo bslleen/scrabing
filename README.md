@@ -8,9 +8,10 @@ an AI re-ranking stage (`discovery/ai_filter.py`) that only activates if
 you configure an API key - the pipeline is fully usable without it.
 
 Pipeline: discover -> scrape -> normalize -> filter (static, optionally
-AI-refined) -> browse in a local UI. Discovery, source registration,
-scraping, normalization, static filtering/scoring, and optional AI
-re-ranking are built so far.
+AI-refined) -> browse in a local web UI. All of it is built: discovery,
+source registration, scraping, normalization, static filtering/scoring,
+optional AI re-ranking, and a local web UI for browsing and editing
+everything without the CLI.
 
 ## Setup
 
@@ -23,9 +24,10 @@ Creates a virtualenv, installs dependencies, and copies `.env.example` to
 
 ## Usage
 
-Interactively: `./start.sh` (a simple menu covering the commands below).
+Interactively: `./start.sh` (a simple menu covering the commands below,
+plus launching the web UI).
 
-Or directly:
+Or the CLI directly:
 
 ```
 source venv/bin/activate
@@ -109,8 +111,7 @@ even a title can't be extracted; a raw_jobs row is never silently dropped.
 `remove_criteria` - named profiles of keywords, exclude-keywords,
 locations, minimum salary, and employment types (multiple profiles can be
 saved, e.g. one per job search). Also stores a free-text `ai_prompt`
-field, persisted here for the AI-assisted matching phase but not read by
-anything yet.
+field, used by `discovery/ai_filter.py`'s optional AI re-ranking.
 
 ### Static matching (`discovery/matcher.py`)
 
@@ -159,6 +160,31 @@ If `AI_API_KEY` is empty (the default) or a criteria profile has no
 error - `python3 cli.py match` alone is always enough to get a usable,
 complete result.
 
+### Web UI (`webui/`)
+
+```
+python3 -m webui.app
+```
+
+or option 10 in `./start.sh`. Opens on `http://127.0.0.1:5000` (set
+`WEBUI_HOST`/`WEBUI_PORT` in `.env` to change that - on macOS, port 5000
+is often already taken by the AirPlay Receiver system service, so you
+may need to pick a different port). A Flask app, server-rendered with
+Jinja - no build step, no JS framework, and it never loads anything from
+a CDN (the one local script handles flash-message dismissal, the delete
+confirmation dialog, and disabling "Run" buttons while they work).
+
+Covers every table: browse sources/jobs/matches/criteria, add a source or
+a job by hand, edit or delete a criteria profile, and trigger "run
+discovery" / "run matching" / "AI re-score" from the browser instead of
+the CLI. Deleting a job or a criteria profile also removes its
+`job_matches` rows in the same transaction (both have a foreign key
+pointing at them with no `ON DELETE CASCADE`, so this is done explicitly
+in `discovery/db.py` rather than left to fail). Every destructive action
+goes through a confirmation dialog and a POST, and every action ends in a
+flash message plus a redirect (so refreshing the result page never
+re-submits it).
+
 ## Tests
 
 ```
@@ -166,4 +192,8 @@ source venv/bin/activate
 pytest
 ```
 
-Tests run against canned HTML fixtures - no real network calls.
+Tests run against canned HTML fixtures and a temp SQLite file per test -
+no real network calls. The web UI is tested with Flask's test client
+(`tests/test_webui.py`), not a browser; every AI-filter test monkeypatches
+`AI_API_KEY` empty regardless of what's in your local `.env`, so a
+configured key never causes a real API call during the test suite.

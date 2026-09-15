@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if mode == "edit" else "New" }} criteria - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">{{ "Edit criteria" if mode == "edit" else "New criteria" }}</h1>
+</div>
+
+{% set action_url = url_for('criteria_update', criteria_id=criteria_id) if mode == "edit" else url_for('criteria_create') %}
+{% set checked_employment_types = form.getlist('employment_types') if form.getlist is defined else (form.get('employment_types') or []) %}
+
+<div class="card" style="max-width:640px">
+  <form method="post" action="{{ action_url }}">
+    <div class="field{% if errors.get('label') %} field--error{% endif %}">
+      <label for="label">Label</label>
+      <input type="text" id="label" name="label" value="{{ form.get('label', '') }}">
+      {% if errors.get('label') %}<div class="field__error">{{ errors['label'] }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="keywords">Keywords</label>
+      <textarea id="keywords" name="keywords">{{ form.get('keywords', '') }}</textarea>
+      <div class="field__helper">One per line. Matched against title and description.</div>
+    </div>
+
+    <div class="field">
+      <label for="exclude_keywords">Exclude keywords</label>
+      <textarea id="exclude_keywords" name="exclude_keywords">{{ form.get('exclude_keywords', '') }}</textarea>
+      <div class="field__helper">One per line. Matched against title and description.</div>
+    </div>
+
+    <div class="field">
+      <label for="locations">Locations</label>
+      <textarea id="locations" name="locations">{{ form.get('locations', '') }}</textarea>
+      <div class="field__helper">One per line. Use 'remote' to match remote roles.</div>
+    </div>
+
+    <div class="field{% if errors.get('min_salary') %} field--error{% endif %}">
+      <label for="min_salary">Min salary (&euro;)</label>
+      <input type="number" id="min_salary" name="min_salary" value="{{ form.get('min_salary') or '' }}">
+      {% if errors.get('min_salary') %}<div class="field__error">{{ errors['min_salary'] }}</div>{% endif %}
+    </div>
+
+    <div class="field">
+      <label>Employment types</label>
+      <div class="checkbox-group">
+        {% for choice in employment_choices %}
+        <label>
+          <input type="checkbox" name="employment_types" value="{{ choice }}" {% if choice in checked_employment_types %}checked{% endif %}>
+          {{ choice }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="ai_prompt">AI prompt</label>
+      <textarea id="ai_prompt" name="ai_prompt">{{ form.get('ai_prompt') or '' }}</textarea>
+      <div class="field__helper">Free text. Only used when an AI API key is configured. Example: senior backend roles, no on-call, prefer startups</div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">{{ "Save changes" if mode == "edit" else "Create criteria" }}</button>
+      <a href="{{ url_for('criteria_list') }}" class="btn btn--secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

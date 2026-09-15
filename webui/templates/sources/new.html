@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Add source - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Add source</h1>
+</div>
+
+<div class="card" style="max-width:560px">
+  <form method="post" action="{{ url_for('sources_create') }}">
+    <div class="field">
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" value="{{ form.get('name', '') }}">
+      <div class="field__helper">Optional - a friendly label shown in the sources list.</div>
+    </div>
+
+    <div class="field{% if errors.get('url') %} field--error{% endif %}">
+      <label for="url">URL</label>
+      <input type="url" id="url" name="url" value="{{ form.get('url', '') }}" placeholder="https://example-company.com/careers">
+      {% if errors.get('url') %}<div class="field__error">{{ errors['url'] }}</div>{% endif %}
+    </div>
+
+    <div class="field{% if errors.get('scrape_config') %} field--error{% endif %}">
+      <label for="scrape_config">Scrape config</label>
+      <textarea id="scrape_config" name="scrape_config">{{ form.get('scrape_config', '') }}</textarea>
+      <div class="field__helper">Optional JSON. Leave blank to use the default keyword-based heuristic.</div>
+      {% if errors.get('scrape_config') %}<div class="field__error">{{ errors['scrape_config'] }}</div>{% endif %}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Add source</button>
+      <a href="{{ url_for('sources_list') }}" class="btn btn--secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

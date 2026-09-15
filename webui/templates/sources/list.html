@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state, action_button, delete_trigger, confirm_dialog %}
+{% block title %}Sources - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Sources</h1>
+  <a href="{{ url_for('sources_new') }}" class="btn btn--primary">Add source</a>
+</div>
+
+{% if sources %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>URL</th>
+        <th>Type</th>
+        <th>Last scraped</th>
+        <th class="col-numeric">Jobs found</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for source in sources %}
+      <tr>
+        <td class="cell-truncate">{{ source['name'] | dash }}</td>
+        <td class="mono cell-truncate">{{ source['url'] }}</td>
+        <td><span class="badge badge--neutral">{{ source['type'] }}</span></td>
+        <td><span title="{{ source['last_scraped_at'] or '' }}">{{ source['last_scraped_at'] | relative_time }}</span></td>
+        <td class="col-numeric">{{ jobs_found.get(source['id'], 0) }}</td>
+        <td>
+          <div class="table-actions">
+            {{ action_button("Run discovery", url_for('sources_run', source_id=source['id']), variant="secondary", small=True, loading_label="Running…") }}
+            {{ delete_trigger("Delete", "delete-source-" ~ source['id'], small=True) }}
+          </div>
+        </td>
+      </tr>
+      {{ confirm_dialog(
+        "delete-source-" ~ source['id'],
+        "Delete this source?",
+        "Scraped jobs from this source will remain. This can't be undone.",
+        url_for('sources_delete', source_id=source['id'])
+      ) }}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ empty_state("No sources yet", "Add a website URL to start discovering jobs", "Add source", url_for('sources_new')) }}
+{% endif %}
+{% endblock %}

@@ -170,6 +170,14 @@ def insert_raw_job(url, source_id=None, external_id=None, raw_html=None, raw_tex
         conn.close()
 
 
+def get_raw_job_by_url(url, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute("SELECT * FROM raw_jobs WHERE url = ?", (url,)).fetchone()
+    finally:
+        conn.close()
+
+
 def get_raw_jobs(db_path=None):
     conn = get_connection(db_path)
     try:
@@ -259,6 +267,214 @@ def delete_job(job_id, db_path=None):
         conn.close()
 
 
+def delete_job_with_matches(job_id, db_path=None):
+    """Deletes a jobs row and every job_matches row referencing it, in one
+    transaction. job_matches.job_id has no ON DELETE CASCADE and foreign
+    keys are enforced, so the child rows must be removed first or the
+    jobs delete would fail. Returns True if the job existed.
+    """
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            conn.execute("DELETE FROM job_matches WHERE job_id = ?", (job_id,))
+            return _delete(conn, "jobs", job_id)
+    finally:
+        conn.close()
+
+
+def search_jobs(status=None, query_text=None, source_id=None, page=1, per_page=25, db_path=None):
+    """Returns (rows, total_count) for the /jobs list page.
+
+    status: 'relevant' | 'rejected' | 'pending' | 'unmatched' | None (all).
+    A job can have several job_matches rows (one per criteria profile);
+    for this general list page, "the" status shown/filtered on is the
+    most recently matched row's status (or 'unmatched' if there are
+    none) - a deliberate simplification since this page isn't scoped to
+    one criteria profile the way /matches is.
+    """
+    conn = get_connection(db_path)
+    try:
+        where = []
+        params = {}
+
+        if query_text:
+            where.append("(j.title LIKE :q OR j.company LIKE :q)")
+            params["q"] = f"%{query_text}%"
+
+        if source_id:
+            where.append("rj.source_id = :source_id")
+            params["source_id"] = source_id
+
+        latest_status_expr = (
+            "(SELECT jm.status FROM job_matches jm "
+            "WHERE jm.job_id = j.id ORDER BY jm.matched_at DESC LIMIT 1)"
+        )
+
+        if status == "unmatched":
+            where.append(f"{latest_status_expr} IS NULL")
+        elif status in ("relevant", "rejected", "pending"):
+            where.append(f"{latest_status_expr} = :status")
+            params["status"] = status
+
+        from_clause = "FROM jobs j LEFT JOIN raw_jobs rj ON rj.id = j.raw_job_id"
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+
+        total = conn.execute(f"SELECT COUNT(*) {from_clause} {where_sql}", params).fetchone()[0]
+
+        rows = conn.execute(
+            f"""
+            SELECT j.*, rj.source_id AS source_id, {latest_status_expr} AS latest_match_status
+            {from_clause}
+            {where_sql}
+            ORDER BY j.id DESC
+            LIMIT :limit OFFSET :offset
+            """,
+            {**params, "limit": per_page, "offset": (page - 1) * per_page},
+        ).fetchall()
+
+        return rows, total
+    finally:
+        conn.close()
+
+
+# --- dashboard / cross-table aggregates -------------------------------
+
+def count_sources(db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_raw_jobs(db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM raw_jobs").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_raw_jobs_by_status(status, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM raw_jobs WHERE status = ?", (status,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_raw_jobs_for_source(source_id, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM raw_jobs WHERE source_id = ?", (source_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_jobs(db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_job_matches_by_status(status, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM job_matches WHERE status = ?", (status,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def count_job_matches_with_ai_score(db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM job_matches WHERE ai_score IS NOT NULL"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def get_latest_source_scraped_at(db_path=None):
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute("SELECT MAX(last_scraped_at) AS latest FROM sources").fetchone()
+        return row["latest"]
+    finally:
+        conn.close()
+
+
+def get_recent_relevant_matches(limit=10, db_path=None):
+    """Joined job_matches + jobs rows, status='relevant', newest first -
+    for the dashboard's "Recent relevant matches" table.
+    """
+    conn = get_connection(db_path)
+    try:
+        return conn.execute(
+            """
+            SELECT jm.*, j.title, j.company, j.location
+            FROM job_matches jm
+            JOIN jobs j ON j.id = jm.job_id
+            WHERE jm.status = 'relevant'
+            ORDER BY jm.matched_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_matches_for_display(filter_mode="all", db_path=None):
+    """Joined job_matches + jobs rows for the /matches page.
+
+    filter_mode: 'all' (status='relevant'), 'ai_confirmed' (+ ai_score is
+    set), 'static_only' (+ ai_score is not set). Sorted by AI score desc
+    (rows with no AI score sort after those with one), then static score
+    desc.
+    """
+    conn = get_connection(db_path)
+    try:
+        where = "jm.status = 'relevant'"
+        if filter_mode == "ai_confirmed":
+            where += " AND jm.ai_score IS NOT NULL"
+        elif filter_mode == "static_only":
+            where += " AND jm.ai_score IS NULL"
+
+        return conn.execute(
+            f"""
+            SELECT jm.*, j.title, j.company, j.location
+            FROM job_matches jm
+            JOIN jobs j ON j.id = jm.job_id
+            WHERE {where}
+            ORDER BY
+                CASE WHEN jm.ai_score IS NULL THEN 1 ELSE 0 END,
+                jm.ai_score DESC,
+                jm.static_score DESC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_job_matches_for_job(job_id, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute(
+            "SELECT * FROM job_matches WHERE job_id = ? ORDER BY matched_at DESC", (job_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 # --- criteria ------------------------------------------------------------
 
 def insert_criteria(label=None, keywords=None, exclude_keywords=None, locations=None,
@@ -299,6 +515,23 @@ def delete_criteria(criteria_id, db_path=None):
     conn = get_connection(db_path)
     try:
         with conn:
+            return _delete(conn, "criteria", criteria_id)
+    finally:
+        conn.close()
+
+
+def delete_criteria_with_matches(criteria_id, db_path=None):
+    """Deletes a criteria row and every job_matches row referencing it, in
+    one transaction - same reasoning as delete_job_with_matches. Unlike a
+    source (whose raw_jobs/jobs cascade would risk losing scraped and
+    normalized data), a criteria's only dependents are its cheap-to-
+    regenerate job_matches rows, so cascading here is the more useful
+    default rather than blocking with a foreign-key error.
+    """
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            conn.execute("DELETE FROM job_matches WHERE criteria_id = ?", (criteria_id,))
             return _delete(conn, "criteria", criteria_id)
     finally:
         conn.close()

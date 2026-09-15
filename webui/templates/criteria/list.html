@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state, action_button, link_button, delete_trigger, confirm_dialog %}
+{% block title %}Criteria - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Criteria</h1>
+  <a href="{{ url_for('criteria_new') }}" class="btn btn--primary">New criteria</a>
+</div>
+
+{% if criteria_list %}
+{% for c in criteria_list %}
+{% set keywords = c['keywords'] | json_list_display %}
+{% set exclude_keywords = c['exclude_keywords'] | json_list_display %}
+{% set locations = c['locations'] | json_list_display %}
+{% set employment_types = c['employment_types'] | json_list_display %}
+<div class="card">
+  <div class="card__heading">{{ c['label'] }}</div>
+
+  {% if keywords %}
+  <div class="criteria-card__row">
+    <span class="meta-label">Keywords</span><br>
+    <span class="badge-row">{% for k in keywords %}<span class="badge badge--neutral">{{ k }}</span>{% endfor %}</span>
+  </div>
+  {% endif %}
+
+  {% if exclude_keywords %}
+  <div class="criteria-card__row">
+    <span class="meta-label">Exclude keywords</span><br>
+    <span class="badge-row">{% for k in exclude_keywords %}<span class="badge badge--danger">{{ k }}</span>{% endfor %}</span>
+  </div>
+  {% endif %}
+
+  {% if locations %}
+  <div class="criteria-card__row">
+    <span class="meta-label">Locations</span><br>
+    <span class="badge-row">{% for l in locations %}<span class="badge badge--accent">{{ l }}</span>{% endfor %}</span>
+  </div>
+  {% endif %}
+
+  <div class="criteria-card__row">
+    <span class="meta-label">Min salary</span><br>
+    {{ c['min_salary'] | dash }}
+  </div>
+
+  {% if employment_types %}
+  <div class="criteria-card__row">
+    <span class="meta-label">Employment types</span><br>
+    {{ employment_types | join(", ") }}
+  </div>
+  {% endif %}
+
+  <div class="criteria-card__row">
+    <span class="meta-label">AI prompt</span>
+    {% if c['ai_prompt'] %}
+    <p class="criteria-card__quote">&ldquo;{{ c['ai_prompt'] }}&rdquo;</p>
+    {% else %}
+    <p class="text-muted">No AI prompt set</p>
+    {% endif %}
+  </div>
+
+  <div class="criteria-card__actions">
+    {{ action_button("Run matching", url_for('criteria_run', criteria_id=c['id']), variant="primary", loading_label="Running…") }}
+    {{ link_button("Edit", url_for('criteria_edit', criteria_id=c['id']), variant="secondary") }}
+    {{ delete_trigger("Delete", "delete-criteria-" ~ c['id']) }}
+  </div>
+</div>
+{{ confirm_dialog(
+  "delete-criteria-" ~ c['id'],
+  "Delete this criteria profile?",
+  "Its match records will also be removed. This can't be undone.",
+  url_for('criteria_delete', criteria_id=c['id'])
+) }}
+{% endfor %}
+{% else %}
+{{ empty_state("No criteria yet", "Define what a relevant job looks like for you", "New criteria", url_for('criteria_new')) }}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state, status_badge, delete_trigger, confirm_dialog, link_button %}
+{% block title %}Jobs - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Jobs</h1>
+  <a href="{{ url_for('jobs_new') }}" class="btn btn--primary">Add job manually</a>
+</div>
+
+<form method="get" action="{{ url_for('jobs_list') }}" class="filter-bar">
+  <div class="field">
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="" {% if not status %}selected{% endif %}>All</option>
+      <option value="relevant" {% if status == 'relevant' %}selected{% endif %}>Relevant</option>
+      <option value="rejected" {% if status == 'rejected' %}selected{% endif %}>Rejected</option>
+      <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+      <option value="unmatched" {% if status == 'unmatched' %}selected{% endif %}>Unmatched</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="q">Search</label>
+    <input type="text" id="q" name="q" value="{{ query_text }}" placeholder="Title or company">
+  </div>
+  <div class="field">
+    <label for="source_id">Source</label>
+    <select id="source_id" name="source_id">
+      <option value="">All</option>
+      {% for source in sources %}
+      <option value="{{ source['id'] }}" {% if source_id == source['id'] %}selected{% endif %}>{{ source['name'] or source['url'] }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <button type="submit" class="btn btn--secondary">Apply</button>
+  </div>
+  {% if has_filters %}
+  <div class="field">
+    <a href="{{ url_for('jobs_list') }}" class="filter-bar__clear">Clear</a>
+  </div>
+  {% endif %}
+</form>
+
+{% if jobs %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Company</th>
+        <th>Location</th>
+        <th class="col-numeric">Salary</th>
+        <th>Posted</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td class="cell-truncate"><a href="{{ url_for('jobs_detail', job_id=job['id']) }}">{{ job['title'] | dash }}</a></td>
+        <td class="cell-truncate">{{ job['company'] | dash }}</td>
+        <td class="cell-truncate">{{ job['location'] | dash }}</td>
+        <td class="col-numeric">{{ job | salary_range }}</td>
+        <td>{{ job['posted_at'] | dash }}</td>
+        <td>{{ status_badge(job['latest_match_status']) }}</td>
+        <td>
+          <div class="table-actions">
+            {{ link_button("View", url_for('jobs_detail', job_id=job['id']), variant="secondary", small=True) }}
+            {{ delete_trigger("Delete", "delete-job-" ~ job['id'], small=True) }}
+          </div>
+        </td>
+      </tr>
+      {{ confirm_dialog(
+        "delete-job-" ~ job['id'],
+        "Delete this job?",
+        "This also removes its match records. This can't be undone.",
+        url_for('jobs_delete', job_id=job['id'])
+      ) }}
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="table-footer">
+    <span>Showing {{ (page - 1) * per_page + 1 }}–{{ (page - 1) * per_page + jobs|length }} of {{ total }}</span>
+    <div class="table-actions">
+      {% if page > 1 %}
+        <a class="btn btn--secondary btn--small" href="{{ url_for('jobs_list', status=status, q=query_text, source_id=source_id, page=page-1) }}">Prev</a>
+      {% endif %}
+      {% if page * per_page < total %}
+        <a class="btn btn--secondary btn--small" href="{{ url_for('jobs_list', status=status, q=query_text, source_id=source_id, page=page+1) }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% else %}
+{{ empty_state("No jobs yet", "Run discovery on a source to populate this list", "Go to Sources", url_for('sources_list')) }}
+{% endif %}
+{% endblock %}

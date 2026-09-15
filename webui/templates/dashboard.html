@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, ai_confirmed_badge %}
+{% block title %}Dashboard - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Dashboard</h1>
+</div>
+
+<div class="stat-grid">
+  {% for stat in stats %}
+  <div class="card">
+    <div class="meta-label stat-card__label">{{ stat.label }}</div>
+    <div class="stat-card__number">{{ stat.number }}</div>
+    <div class="stat-card__subline">{{ stat.subline }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2 class="section-heading">Recent relevant matches</h2>
+
+{% if recent_matches %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Company</th>
+        <th>Location</th>
+        <th class="col-numeric">Static score</th>
+        <th class="col-numeric">AI score</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for match in recent_matches %}
+      <tr>
+        <td class="cell-truncate"><a href="{{ url_for('jobs_detail', job_id=match['job_id']) }}">{{ match['title'] | dash }}</a></td>
+        <td class="cell-truncate">{{ match['company'] | dash }}</td>
+        <td class="cell-truncate">{{ match['location'] | dash }}</td>
+        <td class="col-numeric">{{ match['static_score'] | dash }}</td>
+        <td class="col-numeric">{{ match['ai_score'] | dash }}</td>
+        <td>
+          <span class="badge-row">
+            {{ status_badge(match['status']) }}
+            {% if match['ai_score'] is not none and match['status'] == 'relevant' %}{{ ai_confirmed_badge() }}{% endif %}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-state__title">No relevant matches yet</div>
+  <div class="empty-state__line">Run discovery on a source and matching on a criteria profile to populate this.</div>
+</div>
+{% endif %}
+{% endblock %}

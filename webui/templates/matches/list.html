@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state, link_button, delete_trigger, confirm_dialog, action_button %}
+{% block title %}Matches - Job Discovery{% endblock %}
+
+{% block content %}
+<div class="page-title-row">
+  <h1 class="page-title">Matches</h1>
+</div>
+
+<div class="chip-row">
+  <a class="chip{% if filter_mode == 'all' %} is-active{% endif %}" href="{{ url_for('matches_list', filter='all') }}">All relevant</a>
+  <a class="chip{% if filter_mode == 'ai_confirmed' %} is-active{% endif %}" href="{{ url_for('matches_list', filter='ai_confirmed') }}">AI-confirmed only</a>
+  <a class="chip{% if filter_mode == 'static_only' %} is-active{% endif %}" href="{{ url_for('matches_list', filter='static_only') }}">Static only</a>
+</div>
+
+{% if matches %}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Company</th>
+        <th>Location</th>
+        <th class="col-numeric">Static score</th>
+        <th class="col-numeric">AI score</th>
+        <th>Confidence</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for match in matches %}
+      <tr>
+        <td class="cell-truncate"><a href="{{ url_for('jobs_detail', job_id=match['job_id']) }}">{{ match['title'] | dash }}</a></td>
+        <td class="cell-truncate">{{ match['company'] | dash }}</td>
+        <td class="cell-truncate">{{ match['location'] | dash }}</td>
+        <td class="col-numeric">{{ match['static_score'] | dash }}</td>
+        <td class="col-numeric">{{ match['ai_score'] | dash }}</td>
+        <td>
+          <div class="confidence-bar">
+            <div class="confidence-bar__fill" style="width: {{ confidence_percent(match) }}%"></div>
+          </div>
+        </td>
+        <td>
+          <div class="table-actions">
+            {{ link_button("View", url_for('jobs_detail', job_id=match['job_id']), variant="secondary", small=True) }}
+            {{ action_button("Reject", url_for('matches_reject', match_id=match['id']), variant="secondary", small=True) }}
+            {{ delete_trigger("Delete", "delete-job-" ~ match['job_id'], small=True) }}
+          </div>
+        </td>
+      </tr>
+      {{ confirm_dialog(
+        "delete-job-" ~ match['job_id'],
+        "Delete this job?",
+        "This also removes its match records. This can't be undone.",
+        url_for('jobs_delete', job_id=match['job_id'])
+      ) }}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{{ empty_state("No matches yet", "Create a criteria profile and run matching", "Go to Criteria", url_for('criteria_list')) }}
+{% endif %}
+{% endblock %}
