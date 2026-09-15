@@ -1,69 +1,111 @@
 # Job Discovery
 
 Given a careers page or job board URL, discovers individual job-posting URLs
-on that site, scrapes each one, and stores the results. Rule-based by
-default: no AI, no API keys, no external services required. Everything
-runs locally against a single SQLite file. The one optional exception is
-an AI re-ranking stage (`discovery/ai_filter.py`) that only activates if
-you configure an API key - the pipeline is fully usable without it.
+on that site, scrapes each one, normalizes it into structured fields, scores
+it against what you're looking for, and lets you browse the results in a
+local web UI. Rule-based by default: no AI, no API keys, no accounts, no
+external services required. Everything runs locally against a single SQLite
+file. The one optional exception is an AI re-ranking stage that only
+activates if you configure your own API key - the pipeline is fully usable,
+and gives a complete result, without it.
 
 Pipeline: discover -> scrape -> normalize -> filter (static, optionally
-AI-refined) -> browse in a local web UI. All of it is built: discovery,
-source registration, scraping, normalization, static filtering/scoring,
-optional AI re-ranking, and a local web UI for browsing and editing
-everything without the CLI.
+AI-refined) -> browse in a local web UI.
 
 ## Setup
 
 ```
-./setup.sh
+./setup.sh          # macOS/Linux
+setup.bat            # Windows
 ```
 
-Creates a virtualenv, installs dependencies, and copies `.env.example` to
-`.env` (all settings have defaults, so editing `.env` is optional).
+One-click: creates a virtualenv, installs dependencies, and copies
+`.env.example` to `.env`. Every setting in `.env` has a built-in default, so
+you don't need to edit anything to get started - the only thing you'd add
+is an `AI_API_KEY` if you want the optional AI stage.
 
-## Usage
+## Everyday usage
 
-Interactively: `./start.sh` (a simple menu covering the commands below,
-plus launching the web UI).
-
-Or the CLI directly:
+The fastest path - one command runs the whole pipeline against a site:
 
 ```
-source venv/bin/activate
+python3 discover.py "https://example-company.com/careers" --criteria default
+```
 
-# Try discovery without saving anything:
-python3 cli.py discover https://example-company.com/careers
+This discovers job postings on that page (following pagination), scrapes
+each one, normalizes it into structured fields, scores it against a saved
+criteria profile called "default" (skip `--criteria` to discover/scrape/
+normalize without scoring anything), and - unless a criteria profile has no
+`ai_prompt` set, or `--no-ai` is passed, or no `AI_API_KEY` is configured -
+re-scores the static-relevant results with AI. It prints a progress line
+after each stage:
 
-# Register a site, scrape it, then normalize the results:
-python3 cli.py add-source https://example-company.com/careers --name "Example Company"
-python3 cli.py sources
-python3 cli.py scrape 1
-python3 cli.py normalize
+```
+==> https://example-company.com/careers
+    Registered new source (id 1) for https://example-company.com/careers
+    Scraped 6 new job posting(s)
+    Normalized 6 job(s), 0 error(s)
+    Static match: 2 relevant, 4 rejected
+    AI filter: 2 scored, 1 flipped to rejected, 0 error(s)
 
-# Define what "relevant" means, then score every normalized job against it:
-python3 cli.py add-criteria backend-berlin \
+Summary:
+  scraped:    6 new
+  normalized: 6 (0 error(s))
+  static:     2 relevant, 4 rejected
+  AI filter:  2 scored, 1 flipped to rejected, 0 error(s)
+
+Browse the results: python3 -m webui.app
+```
+
+You'll need a criteria profile before that's useful:
+
+```
+python3 cli.py add-criteria default \
     --keywords "python,django" --exclude-keywords "senior" \
     --locations "Berlin" --min-salary 55000 \
     --ai-prompt "Mid-level backend role using Python, based in Berlin or remote."
-python3 cli.py criteria
-python3 cli.py match 1
-
-# Optional: re-score the static-relevant jobs with AI (no-op without AI_API_KEY set):
-python3 cli.py ai-match 1
 ```
 
-`discover` accepts `--max-pages N` to cap how many paginated listing pages
-are followed. The delay between page fetches is `CRAWL_DELAY_SECONDS` in
-`.env`. If a site blocks the crawler (HTTP 403) or rate-limits it (HTTP
-429), that's reported clearly and the crawl stops for that site rather than
-crashing.
+Then browse everything - and add, edit, or delete rows by hand - in the web
+UI:
+
+```
+python3 -m webui.app
+```
+
+Or skip the CLI entirely: `./start.sh` (macOS/Linux), `start.bat` (Windows),
+or double-click `start.command` (macOS) opens a numbered menu covering all
+of the above, plus the more granular per-stage commands below.
+
+### Per-stage commands
+
+`discover.py` runs everything at once; `cli.py` exposes each stage on its
+own, for when you want to inspect or re-run just one step:
+
+```
+python3 cli.py discover <url>              # crawl + print candidate URLs, no saving
+python3 cli.py add-source <url> [--name]   # register a site
+python3 cli.py sources                     # list registered sources
+python3 cli.py scrape <source_id>          # discover + scrape a registered source
+python3 cli.py normalize [raw_job_id]      # normalize one row, or every pending one
+python3 cli.py add-criteria <label> ...    # create a criteria profile
+python3 cli.py criteria                    # list criteria profiles
+python3 cli.py match <criteria_id>         # static-score every job against one profile
+python3 cli.py ai-match <criteria_id>      # AI re-score the static-relevant results
+```
+
+`discover` and `scrape` accept `--max-pages`/politeness delays via `.env`
+(`MAX_PAGES_PER_SITE`, `CRAWL_DELAY_SECONDS`). If a site blocks the crawler
+(HTTP 403) or rate-limits it (HTTP 429), that's reported clearly and the
+crawl stops for that site rather than crashing.
+
+## How it fits together
 
 ### Data model (`discovery/db.py`, `discovery/schema.sql`)
 
 `sources` (sites to scrape) -> `raw_jobs` (one row per scraped posting) ->
 `jobs` (normalized) -> `job_matches` (scored against a saved `criteria`
-profile). All in `data/jobs.db`.
+profile). All in `data/jobs.db`, gitignored, created on first use.
 
 ### Sources (`discovery/sources.py`)
 
@@ -110,8 +152,9 @@ even a title can't be extracted; a raw_jobs row is never silently dropped.
 `add_criteria`, `list_criteria`, `get_criteria`, `update_criteria`,
 `remove_criteria` - named profiles of keywords, exclude-keywords,
 locations, minimum salary, and employment types (multiple profiles can be
-saved, e.g. one per job search). Also stores a free-text `ai_prompt`
-field, used by `discovery/ai_filter.py`'s optional AI re-ranking.
+saved, e.g. one per job search - `discover.py --criteria <label>` picks one
+by its label). Also stores a free-text `ai_prompt` field, used by
+`discovery/ai_filter.py`'s optional AI re-ranking.
 
 ### Static matching (`discovery/matcher.py`)
 
@@ -137,10 +180,11 @@ settings in `.env` to tune it.
 
 ### Optional AI re-ranking (`discovery/ai_filter.py`)
 
-The one deliberate exception to "nothing but page fetches leaves this
-machine." Off by default - it only runs if `AI_API_KEY` is set in `.env`,
-and even then only on jobs the static filter already marked `'relevant'`
-(never the full raw pool), which bounds both cost and token usage.
+**The one part of this pipeline that makes a network call to an LLM
+provider, and the only reason you'd ever need your own API key.** Off by
+default - it only runs if `AI_API_KEY` is set in `.env`, and even then only
+on jobs the static filter already marked `'relevant'` (never the full raw
+pool), which bounds both cost and token usage.
 
 `run_ai_filtering(criteria_id)` sends each static-relevant job's title/
 company/location/description/requirements, together with the criteria
@@ -157,8 +201,17 @@ is I/O-bound.
 
 If `AI_API_KEY` is empty (the default) or a criteria profile has no
 `ai_prompt` set, this logs a message and returns immediately without
-error - `python3 cli.py match` alone is always enough to get a usable,
-complete result.
+error - static matching alone is always enough to get a usable, complete
+result.
+
+### One-command pipeline (`discover.py`, `discovery/pipeline.py`)
+
+`discover.py` is a thin CLI wrapper around `discovery/pipeline.py`'s
+`run_pipeline()`, which chains everything above for one URL: register (or
+reuse) a source, scrape, normalize, and - if `--criteria <label>` names an
+existing profile - static-match and (unless `--no-ai`) AI-filter. Re-running
+against a URL you've already registered reuses that `sources` row rather
+than creating a duplicate.
 
 ### Web UI (`webui/`)
 
@@ -166,12 +219,12 @@ complete result.
 python3 -m webui.app
 ```
 
-or option 10 in `./start.sh`. Opens on `http://127.0.0.1:5000` (set
-`WEBUI_HOST`/`WEBUI_PORT` in `.env` to change that - on macOS, port 5000
-is often already taken by the AirPlay Receiver system service, so you
+or option 2 in `./start.sh` / `start.bat`. Opens on `http://127.0.0.1:5000`
+(set `WEBUI_HOST`/`WEBUI_PORT` in `.env` to change that - on macOS, port
+5000 is often already taken by the AirPlay Receiver system service, so you
 may need to pick a different port). A Flask app, server-rendered with
-Jinja - no build step, no JS framework, and it never loads anything from
-a CDN (the one local script handles flash-message dismissal, the delete
+Jinja - no build step, no JS framework, and it never loads anything from a
+CDN (the one local script handles flash-message dismissal, the delete
 confirmation dialog, and disabling "Run" buttons while they work).
 
 Covers every table: browse sources/jobs/matches/criteria, add a source or
@@ -185,6 +238,33 @@ goes through a confirmation dialog and a POST, and every action ends in a
 flash message plus a redirect (so refreshing the result page never
 re-submits it).
 
+## Dependencies, and why
+
+Every third-party package this project uses, and what it's for - nothing
+here is incidental:
+
+| Package | Used for | Why this one |
+|---|---|---|
+| `requests` | Every HTTP fetch (crawling, scraping, and the AI stage's API call) | Simple, synchronous, no event loop to reason about - right fit for a tool that fetches a page, waits, fetches the next one |
+| `beautifulsoup4` | Parsing HTML (finding links, JSON-LD blocks, description containers) | Standard, no compiled dependencies, tolerant of the malformed HTML real sites produce |
+| `python-dotenv` | Loading `.env` into `config.py` | The whole project's settings live in one place, read once at startup |
+| `flask` | The local web UI | A thin server-rendered app is all this needs - no API layer, no client-side framework, no build step |
+| `pytest` | The test suite | - |
+
+That's the whole list. No browser-automation library (Playwright, Selenium)
+is used for scraping - `requests` + `beautifulsoup4` handle every site this
+tool targets, and adding a headless browser would be a heavy, slower
+dependency for sites that don't need one. No AI SDK is installed either -
+`discovery/ai_filter.py` calls OpenAI's REST API directly via `requests`,
+which is enough for what it does (one JSON request per job) without pulling
+in a client library.
+
+**Only two things ever leave your machine:** page fetches (discovery,
+scraping) to whatever site you point this at, and - only if you've set
+`AI_API_KEY` - one request per static-relevant job to your configured AI
+provider. Nothing else: no telemetry, no analytics, no accounts, no data
+sent anywhere else.
+
 ## Tests
 
 ```
@@ -194,6 +274,9 @@ pytest
 
 Tests run against canned HTML fixtures and a temp SQLite file per test -
 no real network calls. The web UI is tested with Flask's test client
-(`tests/test_webui.py`), not a browser; every AI-filter test monkeypatches
-`AI_API_KEY` empty regardless of what's in your local `.env`, so a
-configured key never causes a real API call during the test suite.
+(`tests/test_webui.py`), not a browser. `tests/test_discover_cli.py` runs
+the full pipeline through `discover.py`'s actual entry point against the
+same fixtures, with the page-fetching and AI-client seams replaced by
+fakes. Every AI-filter test monkeypatches `AI_API_KEY` empty regardless of
+what's in your local `.env`, so a configured key never causes a real API
+call during the test suite.

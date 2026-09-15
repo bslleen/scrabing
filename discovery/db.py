@@ -127,6 +127,22 @@ def get_source(source_id, db_path=None):
         conn.close()
 
 
+def get_source_by_url(url, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute("SELECT * FROM sources WHERE url = ?", (url,)).fetchone()
+    finally:
+        conn.close()
+
+
+def get_criteria_by_label(label, db_path=None):
+    conn = get_connection(db_path)
+    try:
+        return conn.execute("SELECT * FROM criteria WHERE label = ?", (label,)).fetchone()
+    finally:
+        conn.close()
+
+
 def delete_source(source_id, db_path=None):
     conn = get_connection(db_path)
     try:
