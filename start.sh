@@ -14,6 +14,9 @@ echo "2) Add a source"
 echo "3) List sources"
 echo "4) Scrape a source"
 echo "5) Normalize scraped jobs"
+echo "6) Add a criteria profile"
+echo "7) List criteria profiles"
+echo "8) Match jobs against a criteria profile"
 echo "q) Quit"
 read -rp "> " choice
 
@@ -40,6 +43,26 @@ case "$choice" in
         ;;
     5)
         python3 cli.py normalize
+        ;;
+    6)
+        read -rp "Label: " label
+        read -rp "Keywords (comma-separated, optional): " keywords
+        read -rp "Exclude keywords (comma-separated, optional): " exclude_keywords
+        read -rp "Locations (comma-separated, optional): " locations
+        read -rp "Minimum salary (optional): " min_salary
+        args=("$label")
+        [ -n "$keywords" ] && args+=(--keywords "$keywords")
+        [ -n "$exclude_keywords" ] && args+=(--exclude-keywords "$exclude_keywords")
+        [ -n "$locations" ] && args+=(--locations "$locations")
+        [ -n "$min_salary" ] && args+=(--min-salary "$min_salary")
+        python3 cli.py add-criteria "${args[@]}"
+        ;;
+    7)
+        python3 cli.py criteria
+        ;;
+    8)
+        read -rp "Criteria id: " criteria_id
+        python3 cli.py match "$criteria_id"
         ;;
     q)
         exit 0

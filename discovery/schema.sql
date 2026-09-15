@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS criteria (
   locations TEXT,                    -- JSON array
   min_salary INTEGER,
   employment_types TEXT,             -- JSON array
+  ai_prompt TEXT,                    -- free-text prompt for Phase 7's AI-assisted matching; unused until then
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

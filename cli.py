@@ -1,10 +1,16 @@
 """Command-line entry point for job discovery."""
 import argparse
 
+from discovery import criteria as criteria_module
 from discovery import db, sources as sources_module
 from discovery.crawler import discover_job_urls
+from discovery.matcher import run_static_matching
 from discovery.normalizer import normalize_raw_job
 from discovery.scraper import scrape_source
+
+
+def _split_list(value):
+    return [item.strip() for item in value.split(",") if item.strip()] if value else []
 
 
 def main(argv=None):
@@ -33,9 +39,21 @@ def main(argv=None):
         help="Normalize just this raw_jobs id; omit to normalize every row with status='new'",
     )
 
+    add_criteria_cmd = subcommands.add_parser("add-criteria", help="Create a criteria profile")
+    add_criteria_cmd.add_argument("label", help="A name for this profile, e.g. 'backend-berlin'")
+    add_criteria_cmd.add_argument("--keywords", default="", help="Comma-separated keywords to look for")
+    add_criteria_cmd.add_argument("--exclude-keywords", default="", help="Comma-separated keywords to reject on")
+    add_criteria_cmd.add_argument("--locations", default="", help="Comma-separated acceptable locations")
+    add_criteria_cmd.add_argument("--min-salary", type=int, default=None, help="Minimum acceptable salary")
+
+    subcommands.add_parser("criteria", help="List saved criteria profiles")
+
+    match_cmd = subcommands.add_parser("match", help="Score all jobs against a criteria profile")
+    match_cmd.add_argument("criteria_id", type=int, help="Id of the criteria profile (see `criteria`)")
+
     args = parser.parse_args(argv)
 
-    if args.command in ("add-source", "sources", "scrape", "normalize"):
+    if args.command in ("add-source", "sources", "scrape", "normalize", "add-criteria", "criteria", "match"):
         db.init_db()
 
     if args.command == "discover":
@@ -48,6 +66,12 @@ def main(argv=None):
         _run_scrape(args)
     elif args.command == "normalize":
         _run_normalize(args)
+    elif args.command == "add-criteria":
+        _run_add_criteria(args)
+    elif args.command == "criteria":
+        _run_list_criteria()
+    elif args.command == "match":
+        _run_match(args)
 
 
 def _run_discover(args):
@@ -99,6 +123,32 @@ def _run_normalize(args):
             errored += 1
 
     print(f"\nDone: {normalized} normalized, {errored} error(s)")
+
+
+def _run_add_criteria(args):
+    criteria_id = criteria_module.add_criteria(
+        label=args.label,
+        keywords=_split_list(args.keywords),
+        exclude_keywords=_split_list(args.exclude_keywords),
+        locations=_split_list(args.locations),
+        min_salary=args.min_salary,
+    )
+    print(f"Added criteria {criteria_id}: {args.label}")
+
+
+def _run_list_criteria():
+    rows = criteria_module.list_criteria()
+    if not rows:
+        print("No criteria profiles yet. Use `add-criteria <label>`.")
+        return
+
+    for row in rows:
+        print(f"  [{row['id']}] {row['label']}  keywords={row['keywords']}  min_salary={row['min_salary']}")
+
+
+def _run_match(args):
+    counts = run_static_matching(args.criteria_id)
+    print(f"\n{counts['relevant']} relevant, {counts['rejected']} rejected")
 
 
 if __name__ == "__main__":

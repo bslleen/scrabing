@@ -5,7 +5,9 @@ Pure data access - no scraping, normalization, or filtering logic lives
 here. Columns documented as JSON in schema.sql (scrape_config, keywords,
 exclude_keywords, locations, employment_types, match_reasons) are stored
 and returned as plain TEXT; callers are responsible for json.dumps/loads
-so this layer never silently reshapes what it's given.
+so this layer never silently reshapes what it's given. criteria.ai_prompt
+is a free-text column stored here for Phase 7's AI-assisted matching;
+this layer doesn't interpret it.
 
 All queries are parameterized - never build SQL by string-formatting a
 value into it, even though this database is local and single-user.
@@ -26,11 +28,20 @@ def get_connection(db_path=None):
 
 
 def init_db(db_path=None):
-    """Creates any tables that don't exist yet. Safe to call every run."""
+    """Creates any tables that don't exist yet. Safe to call every run.
+
+    CREATE TABLE IF NOT EXISTS won't add a column to a table that already
+    exists on disk from an earlier version of schema.sql, so newly added
+    columns get a small explicit ALTER TABLE guard below.
+    """
     conn = get_connection(db_path)
     try:
         with conn:
             conn.executescript(SCHEMA_PATH.read_text())
+            try:
+                conn.execute("ALTER TABLE criteria ADD COLUMN ai_prompt TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
     finally:
         conn.close()
 
@@ -59,6 +70,22 @@ def _get_by_id(conn, table, row_id):
 def _delete(conn, table, row_id):
     """Returns True if a row was deleted, False if row_id didn't exist."""
     cursor = conn.execute(f"DELETE FROM {table} WHERE id = ?", (row_id,))
+    return cursor.rowcount > 0
+
+
+def _update(conn, table, row_id, fields):
+    """fields: dict of column -> new value; only these columns are
+    touched. Returns True if a row with this id existed. A no-op (empty
+    fields) still reports whether the row exists, rather than silently
+    claiming success.
+    """
+    if not fields:
+        return _get_by_id(conn, table, row_id) is not None
+
+    assignments = ", ".join(f"{key} = :{key}" for key in fields)
+    params = dict(fields)
+    params["id"] = row_id
+    cursor = conn.execute(f"UPDATE {table} SET {assignments} WHERE id = :id", params)
     return cursor.rowcount > 0
 
 
@@ -230,7 +257,7 @@ def delete_job(job_id, db_path=None):
 # --- criteria ------------------------------------------------------------
 
 def insert_criteria(label=None, keywords=None, exclude_keywords=None, locations=None,
-                     min_salary=None, employment_types=None, db_path=None):
+                     min_salary=None, employment_types=None, ai_prompt=None, db_path=None):
     conn = get_connection(db_path)
     try:
         with conn:
@@ -241,6 +268,7 @@ def insert_criteria(label=None, keywords=None, exclude_keywords=None, locations=
                 "locations": locations,
                 "min_salary": min_salary,
                 "employment_types": employment_types,
+                "ai_prompt": ai_prompt,
             })
     finally:
         conn.close()
@@ -267,6 +295,18 @@ def delete_criteria(criteria_id, db_path=None):
     try:
         with conn:
             return _delete(conn, "criteria", criteria_id)
+    finally:
+        conn.close()
+
+
+def update_criteria(criteria_id, db_path=None, **fields):
+    """Updates only the given columns of a criteria row. Returns True if
+    the row existed.
+    """
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            return _update(conn, "criteria", criteria_id, fields)
     finally:
         conn.close()
 
@@ -311,5 +351,17 @@ def delete_job_match(job_match_id, db_path=None):
     try:
         with conn:
             return _delete(conn, "job_matches", job_match_id)
+    finally:
+        conn.close()
+
+
+def update_job_match(job_match_id, db_path=None, **fields):
+    """Updates only the given columns of a job_matches row. Returns True
+    if the row existed.
+    """
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            return _update(conn, "job_matches", job_match_id, fields)
     finally:
         conn.close()

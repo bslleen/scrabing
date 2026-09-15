@@ -6,8 +6,8 @@ AI, no API keys, no external services. Everything runs locally against a
 single SQLite file.
 
 Pipeline: discover -> scrape -> normalize -> filter -> browse in a local UI.
-Discovery, source registration, scraping, and normalization are built so
-far.
+Discovery, source registration, scraping, normalization, and static
+filtering/scoring are built so far.
 
 ## Setup
 
@@ -35,6 +35,13 @@ python3 cli.py add-source https://example-company.com/careers --name "Example Co
 python3 cli.py sources
 python3 cli.py scrape 1
 python3 cli.py normalize
+
+# Define what "relevant" means, then score every normalized job against it:
+python3 cli.py add-criteria backend-berlin \
+    --keywords "python,django" --exclude-keywords "senior" \
+    --locations "Berlin" --min-salary 55000
+python3 cli.py criteria
+python3 cli.py match 1
 ```
 
 `discover` accepts `--max-pages N` to cap how many paginated listing pages
@@ -46,8 +53,8 @@ crashing.
 ### Data model (`discovery/db.py`, `discovery/schema.sql`)
 
 `sources` (sites to scrape) -> `raw_jobs` (one row per scraped posting) ->
-`jobs` (normalized) -> `job_matches` (filtered against saved `criteria`,
-not built yet). All in `data/jobs.db`.
+`jobs` (normalized) -> `job_matches` (scored against a saved `criteria`
+profile). All in `data/jobs.db`.
 
 ### Sources (`discovery/sources.py`)
 
@@ -88,6 +95,37 @@ regex for salary ranges. Every heuristic leaves a field `NULL` rather than
 guessing when confidence is low - a missing company name is left missing,
 never fabricated. Sets `raw_jobs.status` to `'normalized'`, or `'error'` if
 even a title can't be extracted; a raw_jobs row is never silently dropped.
+
+### Criteria profiles (`discovery/criteria.py`)
+
+`add_criteria`, `list_criteria`, `get_criteria`, `update_criteria`,
+`remove_criteria` - named profiles of keywords, exclude-keywords,
+locations, minimum salary, and employment types (multiple profiles can be
+saved, e.g. one per job search). Also stores a free-text `ai_prompt`
+field, persisted here for the AI-assisted matching phase but not read by
+anything yet.
+
+### Static matching (`discovery/matcher.py`)
+
+`score_job(job, criteria)` scores one job against one criteria profile
+with simple, transparent weighted rules - no AI - and returns `(score,
+reasons)` where `reasons` is a list of short human-readable strings (e.g.
+`"matched keyword: python"`, `"location match: Berlin"`) for every rule
+that fired, positive or negative. Keyword and location matches add
+points; a salary below the criteria's minimum subtracts (only when salary
+data actually exists - a job with no salary listed is never penalized for
+it). An exclude-keyword hit is a hard reject: it forces the score below
+any threshold no matter what else matched, since an exclude list means
+"never show me this."
+
+`run_static_matching(criteria_id)` scores every job in `jobs` and
+inserts/updates one `job_matches` row per job: `'relevant'` at or above
+`STATIC_MATCH_THRESHOLD`, `'rejected'` below it (`'pending'` is only the
+pre-scoring default). Re-running for the same criteria updates existing
+rows instead of duplicating them. This is the only filtering stage when
+no AI is configured, so its output has to stand alone as a complete,
+usable result - see `STATIC_MATCH_THRESHOLD` and the `*_MATCH_WEIGHT`
+settings in `.env` to tune it.
 
 ## Tests
 

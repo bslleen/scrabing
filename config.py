@@ -22,3 +22,10 @@ USER_AGENT = os.getenv(
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
 CRAWL_DELAY_SECONDS = float(os.getenv("CRAWL_DELAY_SECONDS", "1"))
 MAX_PAGES_PER_SITE = int(os.getenv("MAX_PAGES_PER_SITE", "20"))
+
+# Static matcher weights (discovery/matcher.py) and the score at/above
+# which a job is marked 'relevant' rather than 'rejected'.
+KEYWORD_MATCH_WEIGHT = float(os.getenv("KEYWORD_MATCH_WEIGHT", "2"))
+LOCATION_MATCH_WEIGHT = float(os.getenv("LOCATION_MATCH_WEIGHT", "3"))
+SALARY_MATCH_WEIGHT = float(os.getenv("SALARY_MATCH_WEIGHT", "2"))
+STATIC_MATCH_THRESHOLD = float(os.getenv("STATIC_MATCH_THRESHOLD", "3"))
