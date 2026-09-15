@@ -33,8 +33,15 @@ Add `--max-pages N` to cap how many paginated pages are followed.
 
 Crawling only prints results for now - it doesn't persist them yet. The
 full pipeline's schema lives in `discovery/db.py` / `discovery/schema.sql`
-(`sources`, `raw_jobs`, `jobs`, `criteria`, `job_matches` in `data/jobs.db`);
-wiring crawler output into `sources`/`raw_jobs` lands in the scraping phase.
+(`sources`, `raw_jobs`, `jobs`, `criteria`, `job_matches` in `data/jobs.db`).
+
+`discovery/sources.py` registers sites to scrape (`add_source`,
+`list_sources`, `remove_source`). Only `type='custom_html'` is supported so
+far: a site scraped via CSS selectors in `scrape_config`. If you don't
+supply one, a crude default heuristic is stored instead (any `<a>` tag
+whose href/text contains "job" or "career") - meant to be overridden once
+a site has been inspected by hand. Wiring the crawler and a source's
+`scrape_config` together lands in the scraping phase.
 
 ## Tests
 
