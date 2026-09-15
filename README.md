@@ -1,13 +1,16 @@
 # Job Discovery
 
 Given a careers page or job board URL, discovers individual job-posting URLs
-on that site, scrapes each one, and stores the results. Rule-based only: no
-AI, no API keys, no external services. Everything runs locally against a
-single SQLite file.
+on that site, scrapes each one, and stores the results. Rule-based by
+default: no AI, no API keys, no external services required. Everything
+runs locally against a single SQLite file. The one optional exception is
+an AI re-ranking stage (`discovery/ai_filter.py`) that only activates if
+you configure an API key - the pipeline is fully usable without it.
 
-Pipeline: discover -> scrape -> normalize -> filter -> browse in a local UI.
-Discovery, source registration, scraping, normalization, and static
-filtering/scoring are built so far.
+Pipeline: discover -> scrape -> normalize -> filter (static, optionally
+AI-refined) -> browse in a local UI. Discovery, source registration,
+scraping, normalization, static filtering/scoring, and optional AI
+re-ranking are built so far.
 
 ## Setup
 
@@ -39,9 +42,13 @@ python3 cli.py normalize
 # Define what "relevant" means, then score every normalized job against it:
 python3 cli.py add-criteria backend-berlin \
     --keywords "python,django" --exclude-keywords "senior" \
-    --locations "Berlin" --min-salary 55000
+    --locations "Berlin" --min-salary 55000 \
+    --ai-prompt "Mid-level backend role using Python, based in Berlin or remote."
 python3 cli.py criteria
 python3 cli.py match 1
+
+# Optional: re-score the static-relevant jobs with AI (no-op without AI_API_KEY set):
+python3 cli.py ai-match 1
 ```
 
 `discover` accepts `--max-pages N` to cap how many paginated listing pages
@@ -126,6 +133,31 @@ rows instead of duplicating them. This is the only filtering stage when
 no AI is configured, so its output has to stand alone as a complete,
 usable result - see `STATIC_MATCH_THRESHOLD` and the `*_MATCH_WEIGHT`
 settings in `.env` to tune it.
+
+### Optional AI re-ranking (`discovery/ai_filter.py`)
+
+The one deliberate exception to "nothing but page fetches leaves this
+machine." Off by default - it only runs if `AI_API_KEY` is set in `.env`,
+and even then only on jobs the static filter already marked `'relevant'`
+(never the full raw pool), which bounds both cost and token usage.
+
+`run_ai_filtering(criteria_id)` sends each static-relevant job's title/
+company/location/description/requirements, together with the criteria
+profile's free-text `ai_prompt`, to an LLM (OpenAI Chat Completions by
+default, model set by `AI_MODEL`) asking for a 0-100 relevance score and a
+one-to-two-sentence reasoning string. Both are written to
+`job_matches.ai_score`/`ai_reasoning`. A score below `AI_RELEVANCE_THRESHOLD`
+flips that job's status from `'relevant'` to `'rejected'`, with the
+reasoning kept so the UI can show why the AI disagreed with the static
+filter; this stage never promotes a static-rejected job, only narrows what
+the static filter already accepted. Requests run through a small thread
+pool (`AI_MAX_CONCURRENT_REQUESTS`) rather than one-by-one, since scoring
+is I/O-bound.
+
+If `AI_API_KEY` is empty (the default) or a criteria profile has no
+`ai_prompt` set, this logs a message and returns immediately without
+error - `python3 cli.py match` alone is always enough to get a usable,
+complete result.
 
 ## Tests
 

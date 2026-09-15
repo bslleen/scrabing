@@ -38,10 +38,15 @@ def init_db(db_path=None):
     try:
         with conn:
             conn.executescript(SCHEMA_PATH.read_text())
-            try:
-                conn.execute("ALTER TABLE criteria ADD COLUMN ai_prompt TEXT")
-            except sqlite3.OperationalError:
-                pass  # column already exists
+            for statement in (
+                "ALTER TABLE criteria ADD COLUMN ai_prompt TEXT",
+                "ALTER TABLE job_matches ADD COLUMN ai_score REAL",
+                "ALTER TABLE job_matches ADD COLUMN ai_reasoning TEXT",
+            ):
+                try:
+                    conn.execute(statement)
+                except sqlite3.OperationalError:
+                    pass  # column already exists
     finally:
         conn.close()
 

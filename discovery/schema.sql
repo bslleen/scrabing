@@ -57,5 +57,7 @@ CREATE TABLE IF NOT EXISTS job_matches (
   static_score REAL,
   match_reasons TEXT,                -- JSON: which rules hit, for transparency in the UI
   status TEXT DEFAULT 'pending',     -- 'pending', 'relevant', 'rejected'
+  ai_score REAL,                     -- 0-100, from Phase 7's optional AI re-ranking; NULL until run
+  ai_reasoning TEXT,                 -- short LLM explanation for ai_score, for UI transparency
   matched_at TEXT
 );

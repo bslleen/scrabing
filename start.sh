@@ -16,7 +16,8 @@ echo "4) Scrape a source"
 echo "5) Normalize scraped jobs"
 echo "6) Add a criteria profile"
 echo "7) List criteria profiles"
-echo "8) Match jobs against a criteria profile"
+echo "8) Match jobs against a criteria profile (static rules)"
+echo "9) Re-score with AI (skipped if no AI_API_KEY is set)"
 echo "q) Quit"
 read -rp "> " choice
 
@@ -50,11 +51,13 @@ case "$choice" in
         read -rp "Exclude keywords (comma-separated, optional): " exclude_keywords
         read -rp "Locations (comma-separated, optional): " locations
         read -rp "Minimum salary (optional): " min_salary
+        read -rp "AI prompt - free text, used only by AI re-scoring (optional): " ai_prompt
         args=("$label")
         [ -n "$keywords" ] && args+=(--keywords "$keywords")
         [ -n "$exclude_keywords" ] && args+=(--exclude-keywords "$exclude_keywords")
         [ -n "$locations" ] && args+=(--locations "$locations")
         [ -n "$min_salary" ] && args+=(--min-salary "$min_salary")
+        [ -n "$ai_prompt" ] && args+=(--ai-prompt "$ai_prompt")
         python3 cli.py add-criteria "${args[@]}"
         ;;
     7)
@@ -63,6 +66,10 @@ case "$choice" in
     8)
         read -rp "Criteria id: " criteria_id
         python3 cli.py match "$criteria_id"
+        ;;
+    9)
+        read -rp "Criteria id: " criteria_id
+        python3 cli.py ai-match "$criteria_id"
         ;;
     q)
         exit 0

@@ -29,3 +29,14 @@ KEYWORD_MATCH_WEIGHT = float(os.getenv("KEYWORD_MATCH_WEIGHT", "2"))
 LOCATION_MATCH_WEIGHT = float(os.getenv("LOCATION_MATCH_WEIGHT", "3"))
 SALARY_MATCH_WEIGHT = float(os.getenv("SALARY_MATCH_WEIGHT", "2"))
 STATIC_MATCH_THRESHOLD = float(os.getenv("STATIC_MATCH_THRESHOLD", "3"))
+
+# Optional AI relevance re-ranking (discovery/ai_filter.py). Empty
+# AI_API_KEY (the default) means this stage is skipped entirely - the
+# pipeline works from static filtering alone. Read fresh via config.AI_*
+# at call time (not copied to module-level constants elsewhere) so tests
+# can monkeypatch it per-case.
+AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
+AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
+AI_RELEVANCE_THRESHOLD = float(os.getenv("AI_RELEVANCE_THRESHOLD", "50"))
+AI_MAX_CONCURRENT_REQUESTS = int(os.getenv("AI_MAX_CONCURRENT_REQUESTS", "5"))
+AI_REQUEST_TIMEOUT_SECONDS = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))

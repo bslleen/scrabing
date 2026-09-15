@@ -3,6 +3,7 @@ import argparse
 
 from discovery import criteria as criteria_module
 from discovery import db, sources as sources_module
+from discovery.ai_filter import run_ai_filtering
 from discovery.crawler import discover_job_urls
 from discovery.matcher import run_static_matching
 from discovery.normalizer import normalize_raw_job
@@ -45,15 +46,27 @@ def main(argv=None):
     add_criteria_cmd.add_argument("--exclude-keywords", default="", help="Comma-separated keywords to reject on")
     add_criteria_cmd.add_argument("--locations", default="", help="Comma-separated acceptable locations")
     add_criteria_cmd.add_argument("--min-salary", type=int, default=None, help="Minimum acceptable salary")
+    add_criteria_cmd.add_argument(
+        "--ai-prompt", default=None,
+        help="Free-text description of what you're looking for, used by `ai-match`",
+    )
 
     subcommands.add_parser("criteria", help="List saved criteria profiles")
 
-    match_cmd = subcommands.add_parser("match", help="Score all jobs against a criteria profile")
+    match_cmd = subcommands.add_parser("match", help="Score all jobs against a criteria profile (static rules only)")
     match_cmd.add_argument("criteria_id", type=int, help="Id of the criteria profile (see `criteria`)")
+
+    ai_match_cmd = subcommands.add_parser(
+        "ai-match", help="Re-score static-relevant jobs with AI (skipped if no AI_API_KEY is set)",
+    )
+    ai_match_cmd.add_argument("criteria_id", type=int, help="Id of the criteria profile (see `criteria`)")
 
     args = parser.parse_args(argv)
 
-    if args.command in ("add-source", "sources", "scrape", "normalize", "add-criteria", "criteria", "match"):
+    if args.command in (
+        "add-source", "sources", "scrape", "normalize",
+        "add-criteria", "criteria", "match", "ai-match",
+    ):
         db.init_db()
 
     if args.command == "discover":
@@ -72,6 +85,8 @@ def main(argv=None):
         _run_list_criteria()
     elif args.command == "match":
         _run_match(args)
+    elif args.command == "ai-match":
+        _run_ai_match(args)
 
 
 def _run_discover(args):
@@ -132,6 +147,7 @@ def _run_add_criteria(args):
         exclude_keywords=_split_list(args.exclude_keywords),
         locations=_split_list(args.locations),
         min_salary=args.min_salary,
+        ai_prompt=args.ai_prompt,
     )
     print(f"Added criteria {criteria_id}: {args.label}")
 
@@ -149,6 +165,14 @@ def _run_list_criteria():
 def _run_match(args):
     counts = run_static_matching(args.criteria_id)
     print(f"\n{counts['relevant']} relevant, {counts['rejected']} rejected")
+
+
+def _run_ai_match(args):
+    result = run_ai_filtering(args.criteria_id)
+    if result.get("skipped"):
+        return
+    print(f"\n{result['scored']} scored, {result['flipped_to_rejected']} flipped to rejected, "
+          f"{result['errors']} error(s)")
 
 
 if __name__ == "__main__":
