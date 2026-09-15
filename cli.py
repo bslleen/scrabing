@@ -22,11 +22,12 @@ def main(argv=None):
 
 
 def _run_discover(args):
-    links = discover_job_urls(args.url, max_pages=args.max_pages)
+    source = {"url": args.url}
+    urls = discover_job_urls(source, max_pages=args.max_pages)
 
-    print(f"\nDiscovered {len(links)} candidate job URL(s):")
-    for link in links:
-        print(f"  [{link.confidence:6}] {link.url}   ({link.reason})")
+    print(f"\nDiscovered {len(urls)} candidate job URL(s):")
+    for url in urls:
+        print(f"  {url}")
     print("\n(Not saved yet - wiring discovery output into the sources/raw_jobs "
           "tables lands in a later phase.)")
 

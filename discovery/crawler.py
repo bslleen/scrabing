@@ -160,27 +160,36 @@ def find_next_page_url(html, base_url):
 
 
 def fetch_page(url):
-    """Fetches a URL. Returns the response body, or None on failure -
-    failures are reported, never swallowed silently.
+    """Fetches a URL. Returns the response body, or None on failure.
+
+    Failures are reported with a clear, specific message and never raised -
+    a single misbehaving or blocking source must not crash the crawl.
     """
     headers = {"User-Agent": config.USER_AGENT}
     try:
         response = requests.get(url, headers=headers, timeout=config.REQUEST_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        return response.text
     except requests.RequestException as exc:
-        print(f"[discovery] failed to fetch {url}: {exc}")
+        print(f"[discovery] could not reach {url}: {exc}")
         return None
 
+    if response.status_code == 403:
+        print(f"[discovery] {url} returned HTTP 403 (blocked) - the site is refusing this crawler")
+        return None
+    if response.status_code == 429:
+        print(f"[discovery] {url} returned HTTP 429 (rate limited) - back off and try again later")
+        return None
+    if response.status_code >= 400:
+        print(f"[discovery] {url} returned HTTP {response.status_code} - skipping")
+        return None
 
-def discover_job_urls(start_url, max_pages=None, delay_seconds=None, fetch_fn=None):
-    """Crawls a site starting at start_url, following pagination, and
-    returns a deduplicated list of DiscoveredLink for candidate postings.
+    return response.text
+
+
+def _crawl(start_url, max_pages, delay_seconds, fetch):
+    """Low-level pagination engine. Returns the full DiscoveredLink objects
+    (confidence + reason included) so callers/tests can inspect why a link
+    was picked, not just its URL.
     """
-    max_pages = config.MAX_PAGES_PER_SITE if max_pages is None else max_pages
-    delay_seconds = config.REQUEST_DELAY_SECONDS if delay_seconds is None else delay_seconds
-    fetch = fetch_fn or fetch_page
-
     seen_pages = set()
     found = {}  # url -> DiscoveredLink, first occurrence wins
     current_url = start_url
@@ -215,3 +224,20 @@ def discover_job_urls(start_url, max_pages=None, delay_seconds=None, fetch_fn=No
         print(f"[discovery] stopped after reaching MAX_PAGES_PER_SITE={max_pages}")
 
     return list(found.values())
+
+
+def discover_job_urls(source, max_pages=None, delay_seconds=None, fetch_fn=None):
+    """Crawls a source's listing page(s), following pagination, and
+    returns a deduplicated list of candidate job-posting URLs.
+
+    `source` is any mapping with a "url" key - a sqlite3.Row from
+    discovery.db.get_sources()/get_source() works directly, as does a
+    plain dict (handy in tests and for one-off CLI use). The source's
+    scrape_config isn't consumed yet; that lands with actual scraping.
+    """
+    max_pages = config.MAX_PAGES_PER_SITE if max_pages is None else max_pages
+    delay_seconds = config.CRAWL_DELAY_SECONDS if delay_seconds is None else delay_seconds
+    fetch = fetch_fn or fetch_page
+
+    links = _crawl(source["url"], max_pages, delay_seconds, fetch)
+    return [link.url for link in links]

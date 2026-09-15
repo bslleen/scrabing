@@ -1,6 +1,12 @@
-from discovery.crawler import classify_link, discover_job_urls, find_next_page_url
+from pathlib import Path
+from unittest.mock import patch
+
+import requests
+
+from discovery.crawler import classify_link, discover_job_urls, fetch_page, find_next_page_url
 
 BASE = "https://example-company.com/careers"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 # --- classify_link -----------------------------------------------------
@@ -69,73 +75,85 @@ def test_no_next_page_returns_none():
     assert reason is None
 
 
-# --- discover_job_urls (multi-page crawl) --------------------------------
+# --- discover_job_urls (multi-page crawl, from static fixture files) -----
 
-PAGE_1 = """
-<html><body>
-  <a href="/careers/backend-engineer">Backend Engineer</a>
-  <a href="/careers/frontend-engineer">Frontend Engineer</a>
-  <a href="/about-us">About us</a>
-  <a rel="next" href="/careers?page=2">Next</a>
-</body></html>
-"""
-
-PAGE_2 = """
-<html><body>
-  <a href="/careers/backend-engineer">Backend Engineer (dup)</a>
-  <a href="/careers/data-analyst">Data Analyst</a>
-</body></html>
-"""
-
-PAGES = {
-    "https://example-company.com/careers": PAGE_1,
-    "https://example-company.com/careers?page=2": PAGE_2,
+FIXTURE_PAGES = {
+    BASE: FIXTURES_DIR / "listing_page_1.html",
+    f"{BASE}?page=2": FIXTURES_DIR / "listing_page_2.html",
+    f"{BASE}?page=3": FIXTURES_DIR / "listing_page_3.html",
 }
 
 
 def fake_fetch(url):
-    return PAGES.get(url)
+    path = FIXTURE_PAGES.get(url)
+    return path.read_text() if path else None
 
 
-def test_discover_job_urls_follows_pagination_and_dedupes():
-    links = discover_job_urls(
-        "https://example-company.com/careers",
-        max_pages=10,
-        delay_seconds=0,
-        fetch_fn=fake_fetch,
-    )
-    urls = {link.url for link in links}
+def test_discover_job_urls_extracts_postings_across_paginated_fixtures():
+    source = {"url": BASE}
+    urls = discover_job_urls(source, max_pages=10, delay_seconds=0, fetch_fn=fake_fetch)
 
-    assert urls == {
-        "https://example-company.com/careers/backend-engineer",
-        "https://example-company.com/careers/frontend-engineer",
-        "https://example-company.com/careers/data-analyst",
+    assert isinstance(urls, list)
+    assert all(isinstance(u, str) for u in urls)
+    assert set(urls) == {
+        f"{BASE}/backend-engineer",
+        f"{BASE}/frontend-engineer",
+        f"{BASE}/data-analyst",
+        f"{BASE}/marketing-manager",
     }
-    assert len(links) == 3  # the page-2 duplicate must not be counted twice
+    assert len(urls) == 4  # the page-2 duplicate must not be counted twice
 
 
 def test_discover_job_urls_respects_max_pages():
-    links = discover_job_urls(
-        "https://example-company.com/careers",
-        max_pages=1,
-        delay_seconds=0,
-        fetch_fn=fake_fetch,
-    )
-    urls = {link.url for link in links}
+    source = {"url": BASE}
+    urls = discover_job_urls(source, max_pages=2, delay_seconds=0, fetch_fn=fake_fetch)
 
-    # Only page 1 was visited, so the page-2-only listing must be absent.
-    assert "https://example-company.com/careers/data-analyst" not in urls
-    assert len(urls) == 2
+    # Only pages 1-2 were visited, so page 3's posting must be absent.
+    assert f"{BASE}/marketing-manager" not in urls
+    assert set(urls) == {f"{BASE}/backend-engineer", f"{BASE}/frontend-engineer", f"{BASE}/data-analyst"}
 
 
 def test_discover_job_urls_stops_gracefully_on_fetch_failure():
     def failing_fetch(url):
         return None
 
-    links = discover_job_urls(
-        "https://example-company.com/careers",
-        max_pages=10,
-        delay_seconds=0,
-        fetch_fn=failing_fetch,
-    )
-    assert links == []
+    source = {"url": BASE}
+    urls = discover_job_urls(source, max_pages=10, delay_seconds=0, fetch_fn=failing_fetch)
+    assert urls == []
+
+
+# --- fetch_page (HTTP failure reporting) ----------------------------------
+
+class _FakeResponse:
+    def __init__(self, status_code, text="<html></html>"):
+        self.status_code = status_code
+        self.text = text
+
+
+def test_fetch_page_returns_body_on_success():
+    with patch("discovery.crawler.requests.get", return_value=_FakeResponse(200, "<html>ok</html>")):
+        assert fetch_page(BASE) == "<html>ok</html>"
+
+
+def test_fetch_page_reports_403_clearly_and_returns_none(capsys):
+    with patch("discovery.crawler.requests.get", return_value=_FakeResponse(403)):
+        result = fetch_page(BASE)
+
+    assert result is None
+    assert "403" in capsys.readouterr().out
+
+
+def test_fetch_page_reports_429_clearly_and_returns_none(capsys):
+    with patch("discovery.crawler.requests.get", return_value=_FakeResponse(429)):
+        result = fetch_page(BASE)
+
+    assert result is None
+    assert "429" in capsys.readouterr().out
+
+
+def test_fetch_page_handles_connection_errors_without_raising(capsys):
+    with patch("discovery.crawler.requests.get", side_effect=requests.ConnectionError("boom")):
+        result = fetch_page(BASE)
+
+    assert result is None
+    assert "could not reach" in capsys.readouterr().out

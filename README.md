@@ -29,11 +29,17 @@ source venv/bin/activate
 python3 cli.py discover https://example-company.com/careers
 ```
 
-Add `--max-pages N` to cap how many paginated pages are followed.
+Add `--max-pages N` to cap how many paginated pages are followed. The delay
+between page fetches is set by `CRAWL_DELAY_SECONDS` in `.env`. If a site
+blocks the crawler (HTTP 403) or rate-limits it (HTTP 429), that's reported
+clearly and the crawl stops for that site rather than crashing.
 
-Crawling only prints results for now - it doesn't persist them yet. The
-full pipeline's schema lives in `discovery/db.py` / `discovery/schema.sql`
-(`sources`, `raw_jobs`, `jobs`, `criteria`, `job_matches` in `data/jobs.db`).
+`discovery.crawler.discover_job_urls(source)` takes any mapping with a
+"url" key (a `sources` row, or a plain `{"url": ...}` dict) and returns a
+deduplicated `list[str]` of candidate job-posting URLs. Crawling only
+prints results for now - it doesn't persist them yet. The full pipeline's
+schema lives in `discovery/db.py` / `discovery/schema.sql` (`sources`,
+`raw_jobs`, `jobs`, `criteria`, `job_matches` in `data/jobs.db`).
 
 `discovery/sources.py` registers sites to scrape (`add_source`,
 `list_sources`, `remove_source`). Only `type='custom_html'` is supported so
