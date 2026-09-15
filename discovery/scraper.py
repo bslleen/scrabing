@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 import config
 from discovery import db
 from discovery.crawler import discover_job_urls, fetch_page
+from discovery.json_ld import find_job_posting
 
 # Ordered most-specific-first: the first matching selector wins.
 HEURISTIC_SELECTORS = (
@@ -44,27 +45,6 @@ def _clean_text(text):
     return "\n".join(line for line in lines if line)
 
 
-def _find_job_posting(node):
-    """Recursively searches parsed JSON-LD data for a JobPosting object -
-    handles a bare object, a list of objects, and an "@graph" wrapper.
-    """
-    if isinstance(node, dict):
-        type_value = node.get("@type")
-        types = type_value if isinstance(type_value, list) else [type_value]
-        if any(isinstance(t, str) and t.lower() == "jobposting" for t in types):
-            return node
-        for value in node.values():
-            found = _find_job_posting(value)
-            if found:
-                return found
-    elif isinstance(node, list):
-        for item in node:
-            found = _find_job_posting(item)
-            if found:
-                return found
-    return None
-
-
 def _extract_external_id(job_posting):
     identifier = job_posting.get("identifier")
     if isinstance(identifier, dict):
@@ -84,7 +64,7 @@ def _extract_from_json_ld(soup):
         except (json.JSONDecodeError, TypeError):
             continue
 
-        job_posting = _find_job_posting(data)
+        job_posting = find_job_posting(data)
         if not job_posting:
             continue
 

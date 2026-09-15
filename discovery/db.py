@@ -163,6 +163,20 @@ def delete_raw_job(raw_job_id, db_path=None):
         conn.close()
 
 
+def update_raw_job_status(raw_job_id, status, db_path=None):
+    """Returns True if a raw_jobs row with this id existed and was updated."""
+    conn = get_connection(db_path)
+    try:
+        with conn:
+            cursor = conn.execute(
+                "UPDATE raw_jobs SET status = ? WHERE id = ?",
+                (status, raw_job_id),
+            )
+            return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 # --- jobs ------------------------------------------------------------------
 
 def insert_job(raw_job_id=None, title=None, company=None, location=None, description=None,

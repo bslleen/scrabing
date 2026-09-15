@@ -13,6 +13,7 @@ echo "1) Discover job URLs from a site (no saving)"
 echo "2) Add a source"
 echo "3) List sources"
 echo "4) Scrape a source"
+echo "5) Normalize scraped jobs"
 echo "q) Quit"
 read -rp "> " choice
 
@@ -36,6 +37,9 @@ case "$choice" in
     4)
         read -rp "Source id: " source_id
         python3 cli.py scrape "$source_id"
+        ;;
+    5)
+        python3 cli.py normalize
         ;;
     q)
         exit 0

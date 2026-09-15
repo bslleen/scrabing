@@ -3,6 +3,7 @@ import argparse
 
 from discovery import db, sources as sources_module
 from discovery.crawler import discover_job_urls
+from discovery.normalizer import normalize_raw_job
 from discovery.scraper import scrape_source
 
 
@@ -26,9 +27,15 @@ def main(argv=None):
     scrape_cmd = subcommands.add_parser("scrape", help="Discover and scrape all job postings for a source")
     scrape_cmd.add_argument("source_id", type=int, help="Id of the source to scrape (see `sources`)")
 
+    normalize_cmd = subcommands.add_parser("normalize", help="Normalize scraped raw_jobs into the jobs table")
+    normalize_cmd.add_argument(
+        "raw_job_id", type=int, nargs="?", default=None,
+        help="Normalize just this raw_jobs id; omit to normalize every row with status='new'",
+    )
+
     args = parser.parse_args(argv)
 
-    if args.command in ("add-source", "sources", "scrape"):
+    if args.command in ("add-source", "sources", "scrape", "normalize"):
         db.init_db()
 
     if args.command == "discover":
@@ -39,6 +46,8 @@ def main(argv=None):
         _run_list_sources()
     elif args.command == "scrape":
         _run_scrape(args)
+    elif args.command == "normalize":
+        _run_normalize(args)
 
 
 def _run_discover(args):
@@ -70,6 +79,26 @@ def _run_list_sources():
 def _run_scrape(args):
     inserted_ids = scrape_source(args.source_id)
     print(f"\nInserted {len(inserted_ids)} new raw_jobs row(s) for source {args.source_id}")
+
+
+def _run_normalize(args):
+    if args.raw_job_id is not None:
+        job_id = normalize_raw_job(args.raw_job_id)
+        if job_id is not None:
+            print(f"Normalized raw_job {args.raw_job_id} -> job {job_id}")
+        return
+
+    pending = [row for row in db.get_raw_jobs() if row["status"] == "new"]
+    print(f"Normalizing {len(pending)} raw_jobs row(s) with status='new'...")
+
+    normalized, errored = 0, 0
+    for row in pending:
+        if normalize_raw_job(row["id"]) is not None:
+            normalized += 1
+        else:
+            errored += 1
+
+    print(f"\nDone: {normalized} normalized, {errored} error(s)")
 
 
 if __name__ == "__main__":
