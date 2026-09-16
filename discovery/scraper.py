@@ -11,6 +11,9 @@ extraction records which path was used, for the same reason discovery.
 crawler tags each link with a confidence/reason - so it's clear later why
 a given raw_text looks the way it does.
 
+Arbeitnow API sources (discovery.arbeitnow) bypass all of that: there's
+no page to scrape, just JSON items already containing everything needed.
+
 Standalone module: no imports from any other project.
 """
 import json
@@ -21,7 +24,7 @@ from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
 import config
-from discovery import db
+from discovery import arbeitnow, db
 from discovery.crawler import discover_job_urls, fetch_page
 from discovery.json_ld import find_job_posting
 
@@ -104,17 +107,29 @@ def extract_job_content(html):
     return text, None, reason
 
 
-def scrape_source(source_id, db_path=None, fetch_fn=None, delay_seconds=None):
-    """Discovers job URLs for a source (Phase 3) and scrapes each one that
-    isn't already in raw_jobs, storing raw_html and extracted raw_text.
-    Updates the source's last_scraped_at when done. Returns the list of
-    newly inserted raw_jobs ids.
+def scrape_source(source_id, db_path=None, fetch_fn=None, delay_seconds=None, fetch_json_fn=None):
+    """Discovers and scrapes every not-yet-seen job for a source, storing
+    raw_html/raw_text (and, for API sources, raw_json). Updates the
+    source's last_scraped_at when done. Returns the list of newly
+    inserted raw_jobs ids.
+
+    Arbeitnow API sources (discovery.arbeitnow.is_arbeitnow_url) skip the
+    HTML crawler entirely - there's no listing page to paginate through
+    or links to classify, just JSON pages to follow via `links.next`.
     """
     source = db.get_source(source_id, db_path=db_path)
     if source is None:
         print(f"[scraper] no source with id={source_id}")
         return []
 
+    if arbeitnow.is_arbeitnow_url(source["url"]):
+        return _scrape_arbeitnow_source(source, db_path=db_path, fetch_json_fn=fetch_json_fn)
+
+    return _scrape_html_source(source, db_path=db_path, fetch_fn=fetch_fn, delay_seconds=delay_seconds)
+
+
+def _scrape_html_source(source, db_path=None, fetch_fn=None, delay_seconds=None):
+    source_id = source["id"]
     fetch = fetch_fn or fetch_page
     delay_seconds = config.CRAWL_DELAY_SECONDS if delay_seconds is None else delay_seconds
 
@@ -160,6 +175,43 @@ def scrape_source(source_id, db_path=None, fetch_fn=None, delay_seconds=None):
 
         if delay_seconds and index < len(job_urls) - 1:
             time.sleep(delay_seconds)
+
+    db.update_source_last_scraped(source_id, _utc_now_iso(), db_path=db_path)
+    print(f"[scraper] inserted {len(inserted_ids)} new raw_jobs row(s) for source {source_id}")
+    return inserted_ids
+
+
+def _scrape_arbeitnow_source(source, db_path=None, fetch_json_fn=None):
+    source_id = source["id"]
+    items = arbeitnow.fetch_job_items(source["url"], fetch_json_fn=fetch_json_fn)
+    print(f"[scraper] {len(items)} job item(s) fetched from the Arbeitnow API for source {source_id}")
+
+    already_scraped = {row["url"] for row in db.get_raw_jobs(db_path=db_path)}
+
+    inserted_ids = []
+    for item in items:
+        url = item.get("url")
+        if not url or url in already_scraped:
+            continue
+
+        try:
+            raw_job_id = db.insert_raw_job(
+                url=url,
+                source_id=source_id,
+                external_id=item.get("slug"),
+                raw_html=item.get("description"),
+                raw_text=arbeitnow.item_to_text(item.get("description")),
+                raw_json=json.dumps(item),
+                scraped_at=_utc_now_iso(),
+                status="new",
+                db_path=db_path,
+            )
+        except sqlite3.IntegrityError:
+            print(f"[scraper] {url} already scraped (unique constraint), skipping")
+            continue
+
+        inserted_ids.append(raw_job_id)
+        already_scraped.add(url)
 
     db.update_source_last_scraped(source_id, _utc_now_iso(), db_path=db_path)
     print(f"[scraper] inserted {len(inserted_ids)} new raw_jobs row(s) for source {source_id}")

@@ -42,6 +42,7 @@ def init_db(db_path=None):
                 "ALTER TABLE criteria ADD COLUMN ai_prompt TEXT",
                 "ALTER TABLE job_matches ADD COLUMN ai_score REAL",
                 "ALTER TABLE job_matches ADD COLUMN ai_reasoning TEXT",
+                "ALTER TABLE raw_jobs ADD COLUMN raw_json TEXT",
             ):
                 try:
                     conn.execute(statement)
@@ -169,7 +170,7 @@ def update_source_last_scraped(source_id, last_scraped_at, db_path=None):
 # --- raw_jobs ------------------------------------------------------------
 
 def insert_raw_job(url, source_id=None, external_id=None, raw_html=None, raw_text=None,
-                    scraped_at=None, status="new", db_path=None):
+                    raw_json=None, scraped_at=None, status="new", db_path=None):
     conn = get_connection(db_path)
     try:
         with conn:
@@ -179,6 +180,7 @@ def insert_raw_job(url, source_id=None, external_id=None, raw_html=None, raw_tex
                 "url": url,
                 "raw_html": raw_html,
                 "raw_text": raw_text,
+                "raw_json": raw_json,
                 "scraped_at": scraped_at,
                 "status": status,
             })

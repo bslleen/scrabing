@@ -1,12 +1,16 @@
 """Source registration: a "source" is one site the tool has been pointed at.
 
-Only 'custom_html' sources are supported for now - generic scraping via
-CSS selectors stored in scrape_config. ATS-specific handling (Greenhouse,
-Lever, ...) is a later, optional phase.
+Two types exist: 'custom_html' (generic scraping via CSS selectors in
+scrape_config - the default) and 'arbeitnow_api' (Arbeitnow's public
+job-board API, consumed directly as JSON - see discovery.arbeitnow).
+The type is auto-detected from the URL so the caller just pastes a URL.
+Further ATS-specific handling (Greenhouse, Lever, ...) is a later,
+optional phase.
 """
 import json
 
 from discovery import db
+from discovery.arbeitnow import is_arbeitnow_url
 
 # Heuristic default scrape_config for a site the user hasn't configured by
 # hand: treat any <a> tag whose href or visible text contains "job" or
@@ -32,13 +36,23 @@ def _normalize_scrape_config(scrape_config):
     return json.dumps(scrape_config)
 
 
+def _detect_source_type(url):
+    if is_arbeitnow_url(url):
+        return "arbeitnow_api"
+    return "custom_html"
+
+
 def add_source(url, name=None, scrape_config=None, db_path=None):
-    """Registers a new source and returns its id."""
+    """Registers a new source and returns its id. The type is auto-
+    detected from the URL - scrape_config only applies to 'custom_html'
+    sources, since an API source has nothing to select with CSS.
+    """
+    source_type = _detect_source_type(url)
     return db.insert_source(
         url=url,
         name=name,
-        type="custom_html",
-        scrape_config=_normalize_scrape_config(scrape_config),
+        type=source_type,
+        scrape_config=_normalize_scrape_config(scrape_config) if source_type == "custom_html" else None,
         db_path=db_path,
     )
 

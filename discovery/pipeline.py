@@ -9,6 +9,7 @@ Re-running against the same URL reuses its existing `sources` row rather
 than creating a duplicate - discovery is meant to be repeatable.
 """
 from discovery import ai_filter, db
+from discovery import sources as sources_module
 from discovery.matcher import run_static_matching
 from discovery.normalizer import normalize_raw_job
 from discovery.scraper import scrape_source
@@ -42,7 +43,7 @@ def run_pipeline(url, criteria_label=None, use_ai=True, name=None, on_progress=N
         source_id = existing_source["id"]
         report(f"Reusing existing source (id {source_id}) for {url}")
     else:
-        source_id = db.insert_source(url=url, name=name, type="custom_html")
+        source_id = sources_module.add_source(url=url, name=name)
         report(f"Registered new source (id {source_id}) for {url}")
 
     inserted_raw_job_ids = scrape_source(source_id)

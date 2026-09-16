@@ -12,6 +12,9 @@ salary ranges. Every heuristic leaves a field NULL rather than guessing
 when confidence is low; nothing here fabricates a value it isn't
 reasonably sure of.
 
+Arbeitnow API-sourced rows skip all of that and map their already-
+structured JSON fields directly - see _normalize_arbeitnow_job().
+
 Standalone module: no imports from any other project.
 """
 import json
@@ -221,61 +224,129 @@ def _split_description_and_requirements(raw_text):
     return description, requirements
 
 
+def _normalize_via_heuristics(raw_job_id, raw_job, db_path=None):
+    raw_html = raw_job["raw_html"]
+    raw_text = raw_job["raw_text"] or ""
+
+    job_posting = _job_posting_from_html(raw_html)
+
+    title, title_source = _extract_title(job_posting, raw_html, raw_text)
+    if not title:
+        print(f"[normalizer] raw_job {raw_job_id}: could not extract even a title, marking error")
+        db.update_raw_job_status(raw_job_id, "error", db_path=db_path)
+        return None
+
+    company, company_source = _extract_company(job_posting, raw_text)
+    location, location_source = _extract_location(job_posting, raw_text)
+    employment_type, employment_source = _extract_employment_type(job_posting, raw_text)
+    salary_min, salary_max, salary_source = _extract_salary_range(raw_text)
+    description, requirements = _split_description_and_requirements(raw_text)
+    posted_at = job_posting.get("datePosted") if job_posting else None
+
+    print(
+        f"[normalizer] raw_job {raw_job_id}: title via {title_source}, "
+        f"company via {company_source or 'not found'}, "
+        f"location via {location_source or 'not found'}, "
+        f"employment_type via {employment_source or 'not found'}, "
+        f"salary via {salary_source or 'not found'}"
+    )
+
+    job_id = db.insert_job(
+        raw_job_id=raw_job_id,
+        title=title,
+        company=company,
+        location=location,
+        description=description,
+        requirements=requirements,
+        salary_min=salary_min,
+        salary_max=salary_max,
+        employment_type=employment_type,
+        posted_at=posted_at,
+        normalized_at=_utc_now_iso(),
+        db_path=db_path,
+    )
+    db.update_raw_job_status(raw_job_id, "normalized", db_path=db_path)
+    return job_id
+
+
+def _normalize_arbeitnow_job(raw_job_id, raw_job, db_path=None):
+    """Direct field mapping for Arbeitnow API-sourced jobs (discovery.
+    arbeitnow) - no JSON-LD lookup, no heuristics. The API already gives
+    structured title/company/location/remote/job_types/created_at, so
+    guessing at any of them the usual way would only make results less
+    accurate, not more.
+    """
+    item = json.loads(raw_job["raw_json"])
+
+    title = (item.get("title") or "").strip() or None
+    if not title:
+        print(f"[normalizer] raw_job {raw_job_id}: Arbeitnow item has no title, marking error")
+        db.update_raw_job_status(raw_job_id, "error", db_path=db_path)
+        return None
+
+    company = (item.get("company_name") or "").strip() or None
+
+    location = (item.get("location") or "").strip() or None
+    if item.get("remote"):
+        # Folded into location (there's no dedicated boolean column) so
+        # discovery.matcher's existing "remote" location match still
+        # picks these jobs up for free.
+        location = f"{location} (Remote)" if location else "Remote"
+
+    job_types = item.get("job_types") or []
+    employment_type = ", ".join(job_types) if job_types else None
+
+    posted_at = None
+    created_at = item.get("created_at")
+    if isinstance(created_at, (int, float)):
+        posted_at = datetime.fromtimestamp(created_at, tz=timezone.utc).isoformat()
+
+    print(
+        f"[normalizer] raw_job {raw_job_id}: mapped directly from Arbeitnow API fields "
+        f"(company={'yes' if company else 'no'}, location={'yes' if location else 'no'}, "
+        f"employment_type={'yes' if employment_type else 'no'}, posted_at={'yes' if posted_at else 'no'})"
+    )
+
+    job_id = db.insert_job(
+        raw_job_id=raw_job_id,
+        title=title,
+        company=company,
+        location=location,
+        description=raw_job["raw_text"] or None,
+        requirements=None,  # not split out - see module docstring on skipping heuristics
+        salary_min=None,    # not provided by this API - never guessed
+        salary_max=None,
+        employment_type=employment_type,
+        posted_at=posted_at,
+        normalized_at=_utc_now_iso(),
+        db_path=db_path,
+    )
+    db.update_raw_job_status(raw_job_id, "normalized", db_path=db_path)
+    return job_id
+
+
 def normalize_raw_job(raw_job_id, db_path=None):
     """Extracts structured fields from a raw_jobs row and inserts a jobs
     row. Sets raw_jobs.status to 'normalized' on success, or 'error' if
     extraction fails badly (no usable title at all, or an unexpected
     exception) - the raw_jobs row is never deleted or silently left as
     'new' either way. Returns the new jobs.id, or None on failure.
+
+    Arbeitnow API-sourced rows (raw_json populated, source type
+    'arbeitnow_api') are mapped directly from their JSON fields instead
+    of running the JSON-LD/heuristic pipeline below - see
+    _normalize_arbeitnow_job().
     """
     raw_job = db.get_raw_job(raw_job_id, db_path=db_path)
     if raw_job is None:
         print(f"[normalizer] no raw_jobs row with id={raw_job_id}")
         return None
 
-    raw_html = raw_job["raw_html"]
-    raw_text = raw_job["raw_text"] or ""
-
     try:
-        job_posting = _job_posting_from_html(raw_html)
-
-        title, title_source = _extract_title(job_posting, raw_html, raw_text)
-        if not title:
-            print(f"[normalizer] raw_job {raw_job_id}: could not extract even a title, marking error")
-            db.update_raw_job_status(raw_job_id, "error", db_path=db_path)
-            return None
-
-        company, company_source = _extract_company(job_posting, raw_text)
-        location, location_source = _extract_location(job_posting, raw_text)
-        employment_type, employment_source = _extract_employment_type(job_posting, raw_text)
-        salary_min, salary_max, salary_source = _extract_salary_range(raw_text)
-        description, requirements = _split_description_and_requirements(raw_text)
-        posted_at = job_posting.get("datePosted") if job_posting else None
-
-        print(
-            f"[normalizer] raw_job {raw_job_id}: title via {title_source}, "
-            f"company via {company_source or 'not found'}, "
-            f"location via {location_source or 'not found'}, "
-            f"employment_type via {employment_source or 'not found'}, "
-            f"salary via {salary_source or 'not found'}"
-        )
-
-        job_id = db.insert_job(
-            raw_job_id=raw_job_id,
-            title=title,
-            company=company,
-            location=location,
-            description=description,
-            requirements=requirements,
-            salary_min=salary_min,
-            salary_max=salary_max,
-            employment_type=employment_type,
-            posted_at=posted_at,
-            normalized_at=_utc_now_iso(),
-            db_path=db_path,
-        )
-        db.update_raw_job_status(raw_job_id, "normalized", db_path=db_path)
-        return job_id
+        source = db.get_source(raw_job["source_id"], db_path=db_path) if raw_job["source_id"] else None
+        if source is not None and source["type"] == "arbeitnow_api" and raw_job["raw_json"]:
+            return _normalize_arbeitnow_job(raw_job_id, raw_job, db_path=db_path)
+        return _normalize_via_heuristics(raw_job_id, raw_job, db_path=db_path)
 
     except Exception as exc:  # noqa: BLE001 - a bad row must be recorded, never dropped
         print(f"[normalizer] raw_job {raw_job_id}: extraction failed ({exc!r}), marking error")

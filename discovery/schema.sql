@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS raw_jobs (
   url TEXT NOT NULL UNIQUE,
   raw_html TEXT,
   raw_text TEXT,
+  raw_json TEXT,                     -- original item verbatim, for JSON-API sources (e.g. Arbeitnow); NULL for HTML-scraped jobs
   scraped_at TEXT,
   status TEXT DEFAULT 'new'          -- 'new', 'normalized', 'error'
 );

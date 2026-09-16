@@ -109,11 +109,26 @@ profile). All in `data/jobs.db`, gitignored, created on first use.
 
 ### Sources (`discovery/sources.py`)
 
-`add_source`, `list_sources`, `remove_source`. Only `type='custom_html'` is
-supported so far. If you don't supply a `scrape_config`, a crude default
-heuristic is stored instead (any `<a>` tag whose href/text contains "job"
-or "career") - meant to be overridden once a site has been inspected by
-hand. It isn't consumed by the crawler yet.
+`add_source`, `list_sources`, `remove_source`. The source `type` is
+auto-detected from the URL, so you just paste it:
+
+- `custom_html` (the default) - generic HTML scraping via `discovery.crawler`
+  + `discovery.scraper`. If you don't supply a `scrape_config`, a crude
+  default heuristic is stored instead (any `<a>` tag whose href/text
+  contains "job" or "career") - meant to be overridden once a site has
+  been inspected by hand. It isn't consumed by the crawler yet.
+- `arbeitnow_api` - Arbeitnow's public job-board API
+  (`https://www.arbeitnow.com/api/job-board-api`), detected by URL prefix.
+  No crawling or scraping heuristics at all: `discovery/arbeitnow.py`
+  fetches the JSON directly, follows `links.next` for pagination, and
+  `discovery/normalizer.py` maps `title`/`company_name`/`location`/
+  `remote`/`job_types`/`created_at` straight onto the `jobs` columns
+  instead of guessing - real, structured data beats HTML heuristics
+  whenever a source offers it. (Note: a small fraction of Arbeitnow
+  listings arrive with their `description` field double HTML-escaped, so
+  the odd job's description text still shows literal `<p>` markup after
+  cleanup - a data quirk on their end, not something normalization gets
+  wrong for the fields it actually maps.)
 
 ### Crawling (`discovery/crawler.py`)
 

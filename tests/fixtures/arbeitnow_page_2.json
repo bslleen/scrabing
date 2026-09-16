@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "slug": "marketing-manager-hamburg-54321",
+      "company_name": "Widgets Inc",
+      "title": "Marketing Manager",
+      "description": "<p>Lead marketing campaigns across digital channels.</p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/companies/widgets-inc/marketing-manager-hamburg-54321",
+      "tags": ["Marketing"],
+      "job_types": ["Full-time", "Contract"],
+      "location": "Hamburg",
+      "created_at": 1717372800
+    }
+  ],
+  "links": {
+    "first": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "last": "https://www.arbeitnow.com/api/job-board-api?page=2",
+    "prev": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "next": null
+  },
+  "meta": {
+    "current_page": 2
+  }
+}
