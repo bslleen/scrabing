@@ -180,3 +180,22 @@ def test_run_static_matching_rerun_updates_rather_than_duplicates(db_path):
 
 def test_run_static_matching_returns_zero_counts_for_unknown_criteria(db_path):
     assert run_static_matching(999, db_path=db_path) == {"relevant": 0, "rejected": 0}
+
+
+def test_run_static_matching_never_overwrites_an_applied_match(db_path):
+    criteria_id = criteria_module.add_criteria(label="backend-berlin", keywords=["python"], db_path=db_path)
+    job_id = db.insert_job(title="Python Developer", description="Python role.", db_path=db_path)
+
+    run_static_matching(criteria_id, db_path=db_path)
+    match = next(m for m in db.get_job_matches(db_path=db_path) if m["job_id"] == job_id)
+    db.update_job_match(match["id"], db_path=db_path, status="applied", applied_at="2026-01-01T00:00:00+00:00")
+
+    # A later rerun (e.g. after re-scraping) must not recompute and
+    # silently un-apply a job a downstream tool already acted on.
+    counts = run_static_matching(criteria_id, db_path=db_path)
+
+    assert counts == {"relevant": 0, "rejected": 0}  # the applied job isn't recounted either way
+    updated = db.get_job_match(match["id"], db_path=db_path)
+    assert updated["status"] == "applied"
+    assert updated["applied_at"] == "2026-01-01T00:00:00+00:00"
+    assert len(db.get_job_matches(db_path=db_path)) == 1  # no duplicate row created either

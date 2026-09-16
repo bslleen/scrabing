@@ -31,7 +31,7 @@
   {% set variant = {
     "relevant": "success", "rejected": "danger", "pending": "warning",
     "new": "neutral", "normalized": "neutral", "error": "danger",
-    "unmatched": "neutral"
+    "unmatched": "neutral", "applied": "accent"
   }.get(status, "neutral") %}
   <span class="badge badge--{{ variant }}">{{ status or "unmatched" }}</span>
 {% endmacro %}

@@ -156,14 +156,22 @@ def run_static_matching(criteria_id, db_path=None):
     criteria = parse_criteria(criteria_row)
     jobs = db.get_jobs(db_path=db_path)
 
-    existing_match_ids = {
-        row["job_id"]: row["id"]
+    existing_matches = {
+        row["job_id"]: row
         for row in db.get_job_matches(db_path=db_path)
         if row["criteria_id"] == criteria_id
     }
 
     counts = {"relevant": 0, "rejected": 0}
     for job in jobs:
+        existing = existing_matches.get(job["id"])
+        if existing is not None and existing["status"] == "applied":
+            # A downstream tool (CV/email generation) has already acted
+            # on this one - a rerun must never silently un-apply it by
+            # recomputing and overwriting its status.
+            print(f"[matcher] job {job['id']} ({job['title']!r}): already applied, leaving untouched")
+            continue
+
         score, reasons = score_job(job, criteria)
         status = "relevant" if score >= config.STATIC_MATCH_THRESHOLD else "rejected"
         counts[status] += 1
@@ -176,9 +184,8 @@ def run_static_matching(criteria_id, db_path=None):
             "matched_at": _utc_now_iso(),
         }
 
-        match_id = existing_match_ids.get(job["id"])
-        if match_id is not None:
-            db.update_job_match(match_id, db_path=db_path, **fields)
+        if existing is not None:
+            db.update_job_match(existing["id"], db_path=db_path, **fields)
         else:
             db.insert_job_match(job_id=job["id"], criteria_id=criteria_id, db_path=db_path, **fields)
 

@@ -57,8 +57,9 @@ CREATE TABLE IF NOT EXISTS job_matches (
   criteria_id INTEGER REFERENCES criteria(id),
   static_score REAL,
   match_reasons TEXT,                -- JSON: which rules hit, for transparency in the UI
-  status TEXT DEFAULT 'pending',     -- 'pending', 'relevant', 'rejected'
+  status TEXT DEFAULT 'pending',     -- 'pending', 'relevant', 'rejected', 'applied'
   ai_score REAL,                     -- 0-100, from Phase 7's optional AI re-ranking; NULL until run
   ai_reasoning TEXT,                 -- short LLM explanation for ai_score, for UI transparency
-  matched_at TEXT
+  matched_at TEXT,
+  applied_at TEXT                    -- set once a downstream tool (CV/email generation) has applied; NULL until then
 );

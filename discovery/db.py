@@ -43,6 +43,7 @@ def init_db(db_path=None):
                 "ALTER TABLE job_matches ADD COLUMN ai_score REAL",
                 "ALTER TABLE job_matches ADD COLUMN ai_reasoning TEXT",
                 "ALTER TABLE raw_jobs ADD COLUMN raw_json TEXT",
+                "ALTER TABLE job_matches ADD COLUMN applied_at TEXT",
             ):
                 try:
                     conn.execute(statement)

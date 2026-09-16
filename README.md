@@ -193,6 +193,14 @@ no AI is configured, so its output has to stand alone as a complete,
 usable result - see `STATIC_MATCH_THRESHOLD` and the `*_MATCH_WEIGHT`
 settings in `.env` to tune it.
 
+**The seam for a later CV/email-generation tool:** a `job_matches` row can
+also be `'applied'`, with `applied_at` set - this project never sets that
+status itself, but once something else does, `run_static_matching` (and,
+by construction, `run_ai_filtering`, which only ever touches
+`status='relevant'` rows) will never recompute or overwrite it on a
+rerun. A downstream tool marks a job applied via
+`discovery.db.update_job_match(match_id, status="applied", applied_at=...)`.
+
 ### Optional AI re-ranking (`discovery/ai_filter.py`)
 
 **The one part of this pipeline that makes a network call to an LLM
